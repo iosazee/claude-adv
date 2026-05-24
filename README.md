@@ -165,10 +165,6 @@ claude-adv/
     └── HOW-TO.md                   Task-oriented walkthroughs
 ```
 
-## Status
-
-**v0.1.0** — implementation complete. The CI-safe suite (`npm test`) runs in CI against the mock-`claude` fixture and stays green. The real-`claude` integration tests are gated behind `RUN_INTEGRATION_TESTS=true` and should be rerun before tagging a release — see [`docs/HOW-TO.md` §15](docs/HOW-TO.md#15-develop-on-the-plugin-itself).
-
 ## License
 
 MIT. See [`LICENSE`](LICENSE).
