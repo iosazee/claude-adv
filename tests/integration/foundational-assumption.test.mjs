@@ -1,9 +1,9 @@
-// tests/integration/foundational-assumption.test.mjs.skip
+// tests/integration/foundational-assumption.test.mjs
 //
-// This file ends in .skip so npm test does NOT run it (it would require
-// a real `claude` binary and authenticated session). Rename to .mjs and
-// run with `node --test tests/integration/foundational-assumption.test.mjs`
-// to verify the foundational assumption manually before proceeding.
+// Gated on RUN_INTEGRATION_TESTS=true so `npm test` skips it (it requires a
+// real `claude` binary and an authenticated session). Run it manually before
+// tagging a release:
+//   RUN_INTEGRATION_TESTS=true node --test tests/integration/foundational-assumption.test.mjs
 //
 // Plan iter-8 amendments:
 //   - --verbose is required when combining --print with --output-format

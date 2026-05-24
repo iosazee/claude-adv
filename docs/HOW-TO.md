@@ -116,21 +116,17 @@ Codex Desktop exposes absolute `SKILL.md` paths in observed builds, but Codex CL
 
 ### Manual Codex installed-plugin smoke
 
-Before a release, run the skipped Codex smoke test from the plugin root you want to verify:
+Before a release, run the Codex smoke test (gated behind `RUN_INTEGRATION_TESTS=true`) from the plugin root you want to verify. It uses a mock `claude`, so it needs no network and costs nothing:
 
 ```bash
-mv tests/integration/codex-plugin-installed-smoke.test.mjs.skip \
-   tests/integration/codex-plugin-installed-smoke.test.mjs
-node --test tests/integration/codex-plugin-installed-smoke.test.mjs
-mv tests/integration/codex-plugin-installed-smoke.test.mjs \
-   tests/integration/codex-plugin-installed-smoke.test.mjs.skip
+RUN_INTEGRATION_TESTS=true node --test tests/integration/codex-plugin-installed-smoke.test.mjs
 ```
 
 To test a copied or installed plugin root from another checkout, set:
 
 ```bash
 CLAUDE_ADV_CODEX_PLUGIN_ROOT=/path/to/installed/claude-adv \
-node --test tests/integration/codex-plugin-installed-smoke.test.mjs
+RUN_INTEGRATION_TESTS=true node --test tests/integration/codex-plugin-installed-smoke.test.mjs
 ```
 
 Expected output shape:
@@ -142,17 +138,6 @@ Expected output shape:
 ```
 
 The smoke uses a local mock `claude` binary. It asserts `setup --json` returns `ready: true`, both review commands return `approve` payloads, `task --json` returns a rescue payload, CI preflight permits a ready review, `--background` is rejected before any job is queued, and all Codex skills point at an adapter path that exists under the installed plugin root.
-
-To run the real-`claude` Codex review smoke, use:
-
-```bash
-cp tests/integration/codex-real-claude-review.test.mjs.skip \
-   tests/integration/codex-real-claude-review.test.mjs
-node --test tests/integration/codex-real-claude-review.test.mjs
-rm tests/integration/codex-real-claude-review.test.mjs
-```
-
-This requires an authenticated real `claude` CLI and costs a small amount against the configured Claude account.
 
 ---
 
@@ -640,28 +625,22 @@ npm test           # CI-safe tests, no real claude calls
 
 CI-safe tests use a `tests/fixtures/mock-claude.sh` script that fakes `stream-json` output, so they don't make real `claude` calls. All `claude` interactions in CI are mocked.
 
-Real-claude integration tests live as `.test.mjs.skip` files in `tests/integration/`. Each one costs $0.001–$0.02 against `claude-haiku-4-5`. Run them manually before releases:
+Real-claude integration tests live in `tests/integration/`, gated behind `RUN_INTEGRATION_TESTS=true` so `npm test`/CI skip them. Each one costs $0.001–$0.02 against `claude-haiku-4-5`. Run them manually before releases:
 
 ```bash
-cp tests/integration/foundational-assumption.test.mjs.skip \
-   tests/integration/foundational-assumption.test.mjs
-node --test tests/integration/foundational-assumption.test.mjs
-rm tests/integration/foundational-assumption.test.mjs
+RUN_INTEGRATION_TESTS=true node --test tests/integration/
 ```
 
-The seven real-claude tests cover:
+The four real-claude tests cover:
 
 | Test | What it proves |
 |---|---|
-| `foundational-assumption` | `claude --bare --print --verbose --output-format stream-json --json-schema <inline>` parses correctly and the final assistant message can be extracted. |
-| `claude-cli.real` | `buildReviewerArgs` + `spawnAndCollect` work against real claude end-to-end. |
-| `end-to-end-review` | `/claude-adv:adversarial-review` returns a schema-conformant verdict for a real diff. |
+| `foundational-assumption` | `claude --bare --print --verbose --output-format stream-json --json-schema <inline>` parses correctly and the final assistant message can be extracted — a canary against a CLI upgrade changing the flag contract. |
 | `injection-persistence` | A prompt-injection payload in review #1 does NOT bias review #2's verdict. |
 | `tools-empty-jailbreak` | A prompt asking the reviewer to write a file does NOT result in any file write. |
 | `malicious-settings-rescue` | A `.claude/settings.json` declaring extra hooks + permissions does NOT grant the rescue subprocess any of them. |
-| `codex-real-claude-review` | The Codex adapter can run a real `claude` adversarial review. |
 
-The Codex installed-plugin smoke is mock-backed and lives at `tests/integration/codex-plugin-installed-smoke.test.mjs.skip`.
+The Codex installed-plugin smoke (`codex-plugin-installed-smoke`) is mock-backed — no network or cost — and runs under the same `RUN_INTEGRATION_TESTS=true` gate.
 
 ### Changing argv invariants, prompts, or schema
 

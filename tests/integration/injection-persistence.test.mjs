@@ -1,10 +1,11 @@
-// tests/integration/injection-persistence.test.mjs.skip
+// tests/integration/injection-persistence.test.mjs
 //
 // Adversarial test per spec: the worker spawns a fresh `claude` per review,
 // so prompt-injection in one diff MUST NOT bias the next review's verdict.
-// Run manually before each release.
+// Gated on RUN_INTEGRATION_TESTS=true; run manually before each release:
+//   RUN_INTEGRATION_TESTS=true node --test tests/integration/injection-persistence.test.mjs
 //
-// Fixture pattern (same as end-to-end-review.test.mjs.skip): commit a clean
+// Fixture pattern: commit a clean
 // baseline, then dirty the working tree with the test content and use
 // `--scope working-tree` so the review actually has a diff to chew on.
 // The previous "commit each diff" pattern produced an empty branch-diff that

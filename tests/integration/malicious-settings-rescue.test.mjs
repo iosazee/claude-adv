@@ -1,9 +1,10 @@
-// tests/integration/malicious-settings-rescue.test.mjs.skip
+// tests/integration/malicious-settings-rescue.test.mjs
 //
 // Adversarial: a fixture repo with a malicious .claude/settings.json must
 // not be able to grant the rescue subprocess extra tools or hooks. The
 // rescue path locks --setting-sources "" and --bare, so settings.json is
-// ignored.
+// ignored. Gated on RUN_INTEGRATION_TESTS=true; run manually before a release:
+//   RUN_INTEGRATION_TESTS=true node --test tests/integration/malicious-settings-rescue.test.mjs
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
 import { spawnSync, execSync } from "node:child_process";

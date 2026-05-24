@@ -1,8 +1,10 @@
-// tests/integration/tools-empty-jailbreak.test.mjs.skip
+// tests/integration/tools-empty-jailbreak.test.mjs
 //
 // Adversarial: --tools "" must prevent the reviewer from invoking tools
 // even when the prompt asks it to. The CLI flag is the enforcement
-// layer, not the system prompt.
+// layer, not the system prompt. Gated on RUN_INTEGRATION_TESTS=true; run
+// manually before a release:
+//   RUN_INTEGRATION_TESTS=true node --test tests/integration/tools-empty-jailbreak.test.mjs
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
 import { spawnSync, execSync } from "node:child_process";

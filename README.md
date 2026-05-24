@@ -287,23 +287,26 @@ The suite is two tiers: a CI-safe unit layer that runs everywhere with no cost, 
 - **Supervisor & jobs** — `worker` / `worker-ipc` (busy guard, cumulative budget, interrupt kills the in-flight child, socket-path fallback), `state` / `job-liveness` (PID-reuse-safe locks and liveness), `render`, `git`, `args`, `inline-diff-options`, `companion-dispatch`, `command-invocation-quoting`, `cross-vendor-merge`, `auth-waterfall`.
 - **Codex adapter** — eleven `codex-*` files cover the Codex layer: manifest/skills/registry shape, env mapping, argv invariants, background-job rejection, signal handling, and cross-session warnings.
 
-### Real-`claude` integration suite — `tests/integration/*.test.mjs.skip`
+### Real-`claude` integration suite — `tests/integration/`
 
-These need an authenticated `claude` binary and cost real money (~$0.001–$0.02 each against `claude-haiku-4-5`), so they ship disabled (`.skip`) and are run before tagging a release — activate one by dropping the `.skip` suffix, run it with `node --test`, then restore the suffix. Seven exercise real `claude`:
+These call an authenticated `claude` binary and cost real money (~$0.001–$0.02 each against `claude-haiku-4-5`), so they are gated behind an environment variable and skipped by `npm test`/CI. Run them before tagging a release:
 
-- `foundational-assumption` — the `claude --bare --print --verbose --output-format stream-json --json-schema <inline>` contract holds.
-- `end-to-end-review` — adversarial-review against a real diff returns a schema-conformant verdict.
-- `claude-cli.real` — minimal real-`claude` smoke of `buildReviewerArgs` + `spawnAndCollect`.
+```bash
+RUN_INTEGRATION_TESTS=true node --test tests/integration/
+```
+
+Four exercise real `claude` and verify guarantees the mock suite cannot:
+
+- `foundational-assumption` — the `claude --bare --print --verbose --output-format stream-json --json-schema <inline>` flag contract still holds (canary against a CLI upgrade dropping or renaming a flag the plugin depends on).
 - `injection-persistence` — prompt injection in review #1 does **not** bias review #2.
 - `tools-empty-jailbreak` — a prompt asking the reviewer to write a file produces **no** file write.
 - `malicious-settings-rescue` — a hostile `.claude/settings.json` in the target repo grants the rescue subprocess **no** extra tools or hooks.
-- `codex-real-claude-review` — Codex adapter → real `claude` adversarial-review smoke.
 
-The eighth, `codex-plugin-installed-smoke`, runs against a mock `claude` and validates the installed-plugin shell.
+A fifth, `codex-plugin-installed-smoke`, runs against a mock `claude` (no network, no cost) and validates the installed-plugin shell.
 
 ## Status
 
-**v0.1.0** — implementation complete. The CI-safe suite (`npm test`, 293 unit tests plus one smoke import check in the current tree) runs in CI against the mock-`claude` fixture and stays green. Real-`claude` integration tests live as `.test.mjs.skip` files and should be rerun before tagging a release; the Codex installed-plugin smoke is also kept as a skipped manual release check.
+**v0.1.0** — implementation complete. The CI-safe suite (`npm test`) runs in CI against the mock-`claude` fixture and stays green. The real-`claude` integration tests are gated behind `RUN_INTEGRATION_TESTS=true` and should be rerun before tagging a release.
 
 ## License
 

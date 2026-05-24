@@ -1,9 +1,10 @@
-// tests/integration/codex-plugin-installed-smoke.test.mjs.skip
+// tests/integration/codex-plugin-installed-smoke.test.mjs
 //
-// Run manually before release with:
-//   mv tests/integration/codex-plugin-installed-smoke.test.mjs.skip tests/integration/codex-plugin-installed-smoke.test.mjs
-//   node --test tests/integration/codex-plugin-installed-smoke.test.mjs
-//   mv tests/integration/codex-plugin-installed-smoke.test.mjs tests/integration/codex-plugin-installed-smoke.test.mjs.skip
+// Gated on RUN_INTEGRATION_TESTS=true; run manually before a release:
+//   RUN_INTEGRATION_TESTS=true node --test tests/integration/codex-plugin-installed-smoke.test.mjs
+//
+// Unlike the other integration tests this uses a local mock `claude`, so it
+// needs no network access, no real Claude login, and costs nothing.
 //
 // By default this checks the current checkout. To point at a copied/installed
 // Codex plugin root, set CLAUDE_ADV_CODEX_PLUGIN_ROOT=/path/to/installed/root.
@@ -187,7 +188,7 @@ EOF
       { cwd: repo, codexHome, home, pathValue }
     );
     assert.notEqual(rejectedBackground.status, 0);
-    assert.match(rejectedBackground.stderr, /--background is not supported in phase one/);
+    assert.match(rejectedBackground.stderr, /--background is not supported for adversarial-review/);
 
     const status = parseJson(
       runAdapter(pluginRoot, ["status", "--json"], { cwd: repo, codexHome, home, pathValue })
