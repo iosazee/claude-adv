@@ -8,5 +8,7 @@
     "email": "iosazee1@gmail.com"
   },
   "license": "MIT",
+  "homepage": "https://github.com/iosazee/claude-adv",
+  "repository": "https://github.com/iosazee/claude-adv",
   "keywords": ["claude", "claude-code", "review", "adversarial-review", "rescue"]
 }
