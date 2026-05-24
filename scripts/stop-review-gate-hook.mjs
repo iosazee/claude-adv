@@ -43,6 +43,15 @@ const ROOT = path.resolve(fileURLToPath(import.meta.url), "../..");
 // session budget. 10 minutes is well above any budget-bounded review yet
 // still preserves fail-open: if the worker truly hangs past this bound the
 // hook throws and falls back to a fresh subprocess.
+//
+// Timeout nesting: this 600s IPC bound sits INSIDE the Stop hook's own wall
+// budget, declared as `timeout: 900` (seconds) in hooks.json. On the rare
+// path where the worker hangs past 600s AND the fresh-subprocess fallback
+// then also runs, total hook wall time can approach or exceed 900s, at which
+// point Claude Code kills the hook process. That still fails open — a killed
+// Stop hook does not emit exit 2, so the turn is allowed. If you change either
+// value, keep 600s comfortably below the hooks.json budget so the fallback has
+// room to run before the hook is force-killed.
 const REVIEW_IPC_TIMEOUT_MS = 600000;
 
 function log(line) {

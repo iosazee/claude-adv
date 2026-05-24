@@ -19,6 +19,8 @@ Task-oriented walkthroughs for `claude-adv`. Read [`README.md`](../README.md) fi
 13. [Troubleshooting](#13-troubleshooting)
 14. [Cross-vendor review (experimental)](#14-cross-vendor-review-experimental)
 15. [Develop on the plugin itself](#15-develop-on-the-plugin-itself)
+16. [Command and flag reference](#16-command-and-flag-reference)
+17. [For agents and scripting](#17-for-agents-and-scripting)
 
 ---
 
@@ -435,7 +437,38 @@ Set the provider's credentials per the standard `claude` CLI documentation. The 
 
 ## 12. Iterate a review to approval
 
-The conceptual model — the three-value verdict, the `--continue` flag, and the automatic verification pass that makes `approve-with-notes` a real guarantee — is explained in the README: [Iterate-to-approve](../README.md#iterate-to-approve). This section is the operational recipe plus the when-to / when-not-to.
+The default workflow is one-shot: you submit a diff, the reviewer returns a verdict with findings, you triage them, you ship. That's how the plugin was designed — a tough single critic, calibrated to find things, not to validate.
+
+If you want to iterate — edit your diff in response to findings, then re-review, repeat until the reviewer signs off — pass the prior review's JSON output back in via `--continue`. The verdict has three values, not two:
+
+| Verdict              | Meaning                                                                                                                                                                                                    |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `approve`            | No findings. Ship it.                                                                                                                                                                                      |
+| `approve-with-notes` | All remaining findings are severity ≤ `medium` AND confidence ≤ 0.7. The reviewer can't defend any of them strongly enough to block on. Ship it; address the notes if you want, or open follow-up tickets. |
+| `needs-attention`    | At least one finding is `critical`/`high`, or confidence > 0.7. A careful engineer would block.                                                                                                            |
+
+The loop terminates on `approve` or `approve-with-notes`. Both pass the Stop-gate; only `needs-attention` blocks.
+
+Why three states instead of two: the adversarial reviewer is calibrated to find things. With only `approve` / `needs-attention`, anything defensible held the verdict at `needs-attention` and iterate-to-approve loops never converged. The `approve-with-notes` band makes the verdict a calibrated judgment (severity × confidence) rather than an absolute one, so the loop has a fixed point.
+
+### "Approved means approved": automatic final verification
+
+`--continue` passes prior findings into the next review as context. By itself that creates a subtle problem: the reviewer reads "these were addressed" and is more likely to suppress findings it would otherwise raise — including legitimate high-severity ones. The verdict reported back can be `approve-with-notes` even when an unbiased reviewer would say `needs-attention`.
+
+To close that gap, the runtime **automatically runs a fresh independent verification pass** whenever a `--continue` review concludes with `approve` or `approve-with-notes`:
+
+1. Primary review runs with the `--continue` context, including the prior findings.
+2. If the verdict is `needs-attention`, that's authoritative and the runtime returns it (the primary already says "block"; no point spending another model call).
+3. If the verdict is `approve` or `approve-with-notes`, the runtime spawns one more review with the **same diff** and the **same prompt** but **without any prior-findings context**. This is a clean adversarial pass from a reviewer with no bias toward "this was probably resolved."
+4. The fresh review's verdict is what gets returned. The primary review is preserved in the payload under `continueAttempt` so you can inspect both.
+
+So `approve-with-notes` from an iterate-to-approve loop means: at least one biased reviewer AND at least one independent unbiased reviewer both looked at the artifact and neither found anything they could defend at high severity or high confidence. A `--continue` review alone never produces an authoritative approval.
+
+The cost trade-off: at convergence, each iteration costs ~2× a single review. Non-convergent iterations (still `needs-attention`) cost 1×. In practice the loop ends with 1–3 convergence iterations, so total cost is well-bounded.
+
+`prompts/adversarial-review.md` also instructs the `--continue` reviewer to conduct an independent adversarial pass _first_ and cross-reference against the prior list only for deduplication, not as a list of things to skip. That's a soft constraint — the verification pass is the hard one.
+
+The rest of this section is the operational recipe plus the when-to / when-not-to.
 
 ```bash
 # Iteration 1: write JSON output to a file you can feed back in.
@@ -657,3 +690,71 @@ scripts/{session-lifecycle,stop-review-gate}-hook.mjs   # hook entry points
 ```
 
 The dispatcher uses lazy `import()` so a misbehaving handler doesn't break `--help`. Handlers shouldn't import each other; they share state via the libs in `scripts/lib/`.
+
+---
+
+## 16. Command and flag reference
+
+The review/status/result/cancel command files are marked **explicit-invocation only** (`disable-model-invocation: true`). `setup` and `rescue` stay normally invokable because setup is the readiness entrypoint and rescue is also reachable as a subagent, but the intended surface is still deliberate: you invoke commands, or a supervising agent runs them as Bash/slash calls.
+
+| Command                                   | Flags                                                                                                                                                                                                |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/claude-adv:adversarial-review [focus…]` | `--wait` \| `--background` · `--base <ref>` · `--scope auto\|working-tree\|branch` · `--continue <prior.json>` · `--json` · `--model <m>` · `--max-inline-bytes <n>` · `--max-inline-file-bytes <n>` |
+| `/claude-adv:review`                      | same as above (no trailing focus text)                                                                                                                                                               |
+| `/claude-adv:rescue [task…]`              | `--background` (foreground is the default) · `--model <m>` · `--effort <level>` · `--prompt-file <path>` · `--json`                                                                                  |
+| `/claude-adv:setup`                       | `--json` · `--enable-review-gate` \| `--disable-review-gate` · `--set-budget-usd <n>` · `--set-rescue-budget-usd <n>` · `--set-worker-budget-multiplier <n>`                                         |
+| `/claude-adv:status [job-id]`             | `--wait` · `--timeout-ms <ms>` · `--all`                                                                                                                                                             |
+| `/claude-adv:result <job-id>`             | —                                                                                                                                                                                                    |
+| `/claude-adv:cancel <job-id>`             | —                                                                                                                                                                                                    |
+
+- **Scope.** `--scope auto` (default) reviews the working tree if dirty, else the branch diff against its merge-base. `--base <ref>` sets the comparison point for `--scope branch`. See [§4](#4-review-a-branch-instead-of-working-tree-changes).
+- **`--model`** takes a full id (`claude-opus-4-7`) or any alias the `claude` CLI resolves (`opus`, `sonnet`, `haiku`). Reviewer default: `claude-opus-4-7`. See [§9](#9-pick-the-right-model-and-effort-level).
+- **`--effort`** (rescue only) is passed straight through to the inner `claude`; rescue defaults to `high`. See [§9](#9-pick-the-right-model-and-effort-level).
+- **`--max-inline-*`** raise the diff size the reviewer can see inline before it drops to a names-only fallback — see [§5](#5-review-a-large-feature-branch-raise-the-inline-diff-caps).
+
+---
+
+## 17. For agents and scripting
+
+All commands emit machine-readable output with `--json`.
+
+**Review (`--json`)** writes one JSON object to stdout. The verdict lives in the payload, not the exit code:
+
+```jsonc
+{
+  "review_output": {
+    "verdict": "approve" | "approve-with-notes" | "needs-attention",
+    "summary": "one-paragraph rationale",
+    "findings": [
+      {
+        "severity": "critical" | "high" | "medium" | "low",
+        "confidence": 0.0,            // 0–1
+        "title": "...", "body": "...",
+        "file": "src/queue.ts", "line_start": 42, "line_end": 49,
+        "recommendation": "...",
+        "fingerprint": "a1b2c3d4e5f60718"   // stable across iterations
+      }
+    ],
+    "next_steps": ["..."]
+  },
+  "continueAttempt":   null,   // populated only on --continue runs (the biased pass)
+  "finalVerification": { "triggered": false }   // the unbiased pass; see §12
+}
+```
+
+`fingerprint` is `sha1(file:line_start:title)[:16]`, so an agent can diff finding sets across `--continue` passes to see what was resolved.
+
+**Rescue (`--json`)** writes `{ sessionId, ok, exitCode, costUsd, rawOutput, error, stderr }` — `rawOutput` is the rescue Claude's verbatim report.
+
+**Background** (`--background`) returns `{ jobId, status, title }` immediately. Poll with `/claude-adv:status <job-id> --wait` and read the result with `/claude-adv:result <job-id>`.
+
+**Exit codes**
+
+| Context                       | Code | Meaning                                                      |
+| ----------------------------- | ---- | ------------------------------------------------------------ |
+| Slash command (review/rescue) | `0`  | Ran successfully — inspect `verdict` in the payload          |
+| Slash command                 | `1`  | The inner `claude` failed (auth, budget, crash)              |
+| Stop-time gate hook           | `2`  | **Block** — an explicit `needs-attention` verdict            |
+| Stop-time gate hook           | `0`  | Pass, no change, or any internal error (the gate fails open) |
+
+**Delegating from another agent.** `/claude-adv:rescue` forwards to the `claude-adv:claude-rescue` subagent — invoke it via the `Agent` tool with `subagent_type: "claude-adv:claude-rescue"`, not as a skill. The reviewer commands are not model-invocable; a supervising agent runs them as shell/slash calls and parses the JSON.
