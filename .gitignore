@@ -1,0 +1,16 @@
+node_modules/
+.DS_Store
+*.log
+.env
+.env.local
+coverage/
+.nyc_output/
+.context
+
+# Local test state — these directories are written at test runtime
+tests/fixtures/tmp/
+.claude-state-test/
+
+# Internal maintainer docs — not shipped with the plugin
+docs/RELEASE.md
+docs/specs

@@ -1,0 +1,8 @@
+claude-adv
+
+Portions of this software are derived from OpenAI's codex-plugin-cc
+(https://github.com/openai/codex-plugin-cc), used under the terms of its
+license. The original codex plugin is © OpenAI.
+
+This is an unofficial, independent port. It is not affiliated with or
+endorsed by OpenAI or Anthropic.

@@ -1,0 +1,12 @@
+{
+  "name": "claude-adv",
+  "version": "0.1.0",
+  "description": "Adversarial code review and write-capable rescue, powered by Claude. Port of codex-plugin-cc.",
+  "displayName": "Claude Adv",
+  "author": {
+    "name": "zee",
+    "email": "iosazee1@gmail.com"
+  },
+  "license": "MIT",
+  "keywords": ["claude", "claude-code", "review", "adversarial-review", "rescue"]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "claude-adv",
+  "description": "Adversarial Claude code review and write-capable rescue for Claude Code.",
+  "owner": {
+    "name": "zee",
+    "email": "iosazee1@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "claude-adv",
+      "source": "./",
+      "description": "Adversarial code review and write-capable rescue, powered by Claude."
+    }
+  ]
+}

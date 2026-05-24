@@ -1,0 +1,25 @@
+{
+  "name": "claude-adv",
+  "version": "0.1.0",
+  "description": "Claude-powered adversarial review and rescue for Codex work",
+  "skills": "./codex/skills/",
+  "author": {
+    "name": "zee",
+    "email": "iosazee1@gmail.com"
+  },
+  "license": "MIT",
+  "keywords": ["codex", "claude", "review", "adversarial-review", "rescue"],
+  "interface": {
+    "displayName": "Claude Adv",
+    "shortDescription": "Claude reviews and rescue from Codex",
+    "longDescription": "Delegates Codex review and rescue requests to isolated fresh Claude subprocesses through the shared claude-adv runtime.",
+    "developerName": "zee",
+    "category": "Coding",
+    "capabilities": ["Read", "Write"],
+    "defaultPrompt": [
+      "Run a Claude adversarial review of my changes.",
+      "Ask Claude for a neutral review of this branch.",
+      "Use Claude rescue on this failing task."
+    ]
+  }
+}
