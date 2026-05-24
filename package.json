@@ -8,9 +8,9 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "test": "node --test 'tests/**/*.test.mjs'",
-    "test:unit": "node --test 'tests/unit/**/*.test.mjs'",
-    "test:integration": "node --test 'tests/integration/**/*.test.mjs'",
+    "test": "node --test tests/*.test.mjs tests/*/*.test.mjs",
+    "test:unit": "node --test tests/unit/*.test.mjs",
+    "test:integration": "node --test tests/integration/*.test.mjs",
     "lint": "biome lint scripts tests",
     "lint:fix": "biome lint --write scripts tests",
     "format": "biome format --write scripts tests",
