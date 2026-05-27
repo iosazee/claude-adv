@@ -1497,8 +1497,27 @@ test("companion: background task does not overwrite fast completion after delaye
   );
   assert.equal(r.status, 0, `stderr: ${r.stderr}`);
   const parsed = JSON.parse(r.stdout);
-  job = readStoredJob(repo, pluginData, parsed.jobId);
-  const indexedJob = readIndexedJob(repo, pluginData, parsed.jobId);
+  // The task subprocess is detached; the parent returns as soon as the
+  // running-record handshake completes. Poll for terminal status so we
+  // observe the no-overwrite invariant (parent's "running" write loses to
+  // the child's "completed" write via writeJobFileUnlessStatus) rather than
+  // racing the detached child. Deadline is generous because the full-suite
+  // parallelism can starve a detached child for several seconds.
+  // Detached child writes the per-job file then upserts the state.json index;
+  // poll BOTH so we don't observe the small write-then-upsert window.
+  const deadline = Date.now() + 20000;
+  let indexedJob = null;
+  while (Date.now() < deadline) {
+    job = readStoredJob(repo, pluginData, parsed.jobId);
+    indexedJob = readIndexedJob(repo, pluginData, parsed.jobId);
+    if (
+      (job?.status === "completed" || job?.status === "failed") &&
+      (indexedJob?.status === "completed" || indexedJob?.status === "failed")
+    ) {
+      break;
+    }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+  }
 
   assert.equal(job.status, "completed");
   assert.equal(job.phase, "completed");

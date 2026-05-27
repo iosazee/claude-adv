@@ -416,14 +416,23 @@ process.stdout.write(JSON.stringify(result) + "\\n");
     env: { ...process.env, CODEX_HOME: codexHome, REPO_ROOT: installA, DELAY_LOCK_WRITE_MS: "50" },
     stdio: ["ignore", "pipe", "pipe"],
   });
+  // Attach the close listener synchronously at spawn time. waitForClose
+  // registers a one-time "close" listener when called; if we deferred it
+  // until after awaiting childA, the no-delay childB could emit "close"
+  // before the listener existed (the exit ordering under lock contention is
+  // racy on loaded runners), the event would be missed, and the promise
+  // would hang — surfacing as "Promise resolution is still pending but the
+  // event loop has already resolved" and poisoning subsequent tests.
+  const closeA = waitForClose(childA);
   await new Promise((resolve) => setTimeout(resolve, 5));
   const childB = spawn(process.execPath, [worker], {
     env: { ...process.env, CODEX_HOME: codexHome, REPO_ROOT: installB },
     stdio: ["ignore", "pipe", "pipe"],
   });
+  const closeB = waitForClose(childB);
 
-  assert.deepEqual(await waitForClose(childA), { code: 0, signal: null });
-  assert.deepEqual(await waitForClose(childB), { code: 0, signal: null });
+  assert.deepEqual(await closeA, { code: 0, signal: null });
+  assert.deepEqual(await closeB, { code: 0, signal: null });
   assert.deepEqual(
     readRegistry(codexHome)
       .installs.map((entry) => entry.root)
