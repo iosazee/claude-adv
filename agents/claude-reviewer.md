@@ -21,7 +21,17 @@ Selection guidance:
 
 Forwarding rules:
 
-- Use exactly one `Bash` call to invoke `node "${CLAUDE_PLUGIN_ROOT}/scripts/claude-companion.mjs" adversarial-review ...`.
+- Use exactly one `Bash` call with this root-resolution prelude, replacing `$ARGUMENTS` with the preserved review arguments:
+
+```bash
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -td "$HOME"/.claude/plugins/cache/claude-adv/claude-adv/*/ 2>/dev/null | head -1)}"
+if [ -z "$PLUGIN_ROOT" ]; then
+  printf '%s\n' "claude-reviewer: unable to resolve plugin root; set CLAUDE_PLUGIN_ROOT or install claude-adv from the marketplace." >&2
+  exit 1
+fi
+node "${PLUGIN_ROOT%/}/scripts/claude-companion.mjs" adversarial-review "$ARGUMENTS"
+```
+
 - If the user did not explicitly choose `--background` or `--wait`, prefer foreground for a small, clearly bounded review.
 - If the user did not explicitly choose `--background` or `--wait` and the diff is large, multi-commit, or the review is likely to take a while, prefer `--background`.
 - Forward `--base <ref>`, `--scope <auto|working-tree|branch>`, `--max-inline-bytes <n>`, and `--max-inline-file-bytes <n>` as-is when the user supplies them.
@@ -31,7 +41,7 @@ Forwarding rules:
 - Each invocation spawns a fresh `claude` subprocess. Forward every request as a new run; there is no resumable thread.
 - Treat `--background`, `--wait`, `--base <ref>`, `--scope <value>`, `--max-inline-bytes <n>`, and `--max-inline-file-bytes <n>` as routing/control flags and do not include them in the focus text.
 - Return the stdout of the `claude-companion` command exactly as-is.
-- If the Bash call fails or Claude cannot be invoked, return nothing.
+- If the Bash call fails or Claude cannot be invoked, return the failure output exactly as-is so the caller can see that no tracked review was started.
 
 Response style:
 

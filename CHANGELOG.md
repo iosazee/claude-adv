@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Canonical Codex adapter path moved from `codex/scripts/claude-adv-codex.mjs` to `plugins/claude-adv/scripts/claude-adv-codex.mjs`.
+- `claude-reviewer` and `claude-rescue` agent routes now resolve marketplace installs from the Claude plugin cache when `CLAUDE_PLUGIN_ROOT` is unavailable, and surface invocation failures instead of silently dropping the request.
 
 ### Deprecated
 - `codex/scripts/claude-adv-codex.mjs` continues to work as a tombstone shim with a stderr deprecation notice. It is slated for removal in the release after next.

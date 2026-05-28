@@ -793,10 +793,14 @@ All reviewer slash commands (`review`, `adversarial-review`, `status`, `result`,
 `${CLAUDE_PLUGIN_ROOT}` is populated only inside slash-command bodies. In an agent's Bash call it expands to empty, silently producing `Cannot find module '/scripts/claude-companion.mjs'`. Resolve the path dynamically — the installed location is `~/.claude/plugins/cache/claude-adv/claude-adv/<version>/`, and the version segment changes across releases:
 
 ```bash
-PLUGIN_DIR="$(ls -td ~/.claude/plugins/cache/claude-adv/claude-adv/*/ | head -1)"
-node "${PLUGIN_DIR%/}/scripts/claude-companion.mjs" adversarial-review --wait --base main --scope branch
-node "${PLUGIN_DIR%/}/scripts/claude-companion.mjs" status <job-id>
-node "${PLUGIN_DIR%/}/scripts/claude-companion.mjs" result <job-id> --json
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -td "$HOME"/.claude/plugins/cache/claude-adv/claude-adv/*/ 2>/dev/null | head -1)}"
+if [ -z "$PLUGIN_ROOT" ]; then
+  printf '%s\n' "claude-adv: unable to resolve plugin root; set CLAUDE_PLUGIN_ROOT or install claude-adv from the marketplace." >&2
+  exit 1
+fi
+node "${PLUGIN_ROOT%/}/scripts/claude-companion.mjs" adversarial-review --wait --base main --scope branch
+node "${PLUGIN_ROOT%/}/scripts/claude-companion.mjs" status <job-id>
+node "${PLUGIN_ROOT%/}/scripts/claude-companion.mjs" result <job-id> --json
 ```
 
 For `claude --plugin-dir ./claude-adv` installs, point at the clone (`node "/path/to/claude-adv/scripts/claude-companion.mjs" …`). The Codex adapter at `plugins/claude-adv/scripts/claude-adv-codex.mjs` resolves its plugin root from its own file path and needs no env var.

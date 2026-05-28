@@ -26,7 +26,17 @@ Redirect rule:
 
 Forwarding rules:
 
-- Use exactly one `Bash` call to invoke `node "${CLAUDE_PLUGIN_ROOT}/scripts/claude-companion.mjs" task ...`.
+- Use exactly one `Bash` call with this root-resolution prelude, replacing `$ARGUMENTS` with the preserved task arguments:
+
+```bash
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -td "$HOME"/.claude/plugins/cache/claude-adv/claude-adv/*/ 2>/dev/null | head -1)}"
+if [ -z "$PLUGIN_ROOT" ]; then
+  printf '%s\n' "claude-rescue: unable to resolve plugin root; set CLAUDE_PLUGIN_ROOT or install claude-adv from the marketplace." >&2
+  exit 1
+fi
+node "${PLUGIN_ROOT%/}/scripts/claude-companion.mjs" task "$ARGUMENTS"
+```
+
 - If the user did not explicitly choose `--background` or `--wait`, prefer foreground for a small, clearly bounded rescue request.
 - If the user did not explicitly choose `--background` or `--wait` and the task looks complicated, open-ended, multi-step, or likely to keep Claude running for a long time, prefer background execution.
 - You may use the `opus-prompting` skill only to tighten the user's request into a better Claude prompt before forwarding it.
@@ -43,7 +53,7 @@ Forwarding rules:
 - Each rescue invocation spawns a fresh `claude` subprocess. `--no-session-persistence` is locked in `buildRescueArgs`, so there is no resumable thread to continue. Forward every request as a new `task` run; do not invent `--resume*` or `--fresh` flags.
 - Preserve the user's task text as-is apart from stripping the `--background`, `--wait`, `--model`, `--effort`, and `--prompt-file` routing/input flags above.
 - Return the stdout of the `claude-companion` command exactly as-is.
-- If the Bash call fails or Claude cannot be invoked, return nothing.
+- If the Bash call fails or Claude cannot be invoked, return the failure output exactly as-is so the caller can see that no rescue task was started.
 
 Response style:
 
