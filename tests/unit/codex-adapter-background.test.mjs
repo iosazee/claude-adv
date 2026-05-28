@@ -7,8 +7,8 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(fileURLToPath(import.meta.url), "../../..");
-const ADAPTER = path.join(ROOT, "codex/scripts/claude-adv-codex.mjs");
-const COMPANION = path.join(ROOT, "scripts/claude-companion.mjs");
+const ADAPTER = path.join(ROOT, "plugins/claude-adv/scripts/claude-adv-codex.mjs");
+const COMPANION = path.join(ROOT, "plugins/claude-adv/scripts/claude-companion.mjs");
 const SUBCOMMANDS = ["review", "adversarial-review", "task", "setup", "status", "result", "cancel"];
 const WAIT_HINT_SUBCOMMANDS = new Set(["review", "adversarial-review", "task"]);
 const NO_BACKGROUND_SUBCOMMANDS = new Set(["setup", "status", "result", "cancel"]);

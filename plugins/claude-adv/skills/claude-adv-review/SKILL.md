@@ -12,7 +12,7 @@ Use this skill when Codex should ask Claude for an isolated review of the curren
 Resolve `<plugin-root>` in this order:
 
 1. Use user-set `CLAUDE_PLUGIN_ROOT` when it is an absolute path containing `.codex-plugin/plugin.json`.
-2. If Codex exposes this `SKILL.md` path, resolve the `SKILL.md` path with `realpath`, then go three directories up from `codex/skills/claude-adv-review/SKILL.md`.
+2. If Codex exposes this `SKILL.md` path, resolve the `SKILL.md` path with `realpath`, then go two directories up from `skills/claude-adv-review/SKILL.md` (the plugin root contains `.codex-plugin/plugin.json`).
 3. Otherwise fail and show a Known installs hint from the registry contents.
 
 Codex CLI/CI skill-path exposure is not guaranteed; in CI, set `CLAUDE_PLUGIN_ROOT` explicitly.
@@ -23,13 +23,13 @@ Registry entries are hints only. Do not auto-resolve plugin root from the regist
 Run a neutral foreground review:
 
 ```bash
-node "<plugin-root>/codex/scripts/claude-adv-codex.mjs" review --wait
+node "<plugin-root>/scripts/claude-adv-codex.mjs" review --wait
 ```
 
 Run a skeptical foreground review:
 
 ```bash
-node "<plugin-root>/codex/scripts/claude-adv-codex.mjs" adversarial-review --wait
+node "<plugin-root>/scripts/claude-adv-codex.mjs" adversarial-review --wait
 ```
 
 Pass `--scope working-tree` when the repository has no default branch yet.

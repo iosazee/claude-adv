@@ -12,7 +12,7 @@ import {
   resolveValidatedCodexHome,
   roundedBootEpochSeconds,
   validateThreadId,
-} from "../../codex/scripts/lib/codex-env.mjs";
+} from "../../plugins/claude-adv/scripts/lib/codex-env.mjs";
 
 function makeHome() {
   const home = mkdtempSync(path.join(tmpdir(), "claude-adv-codex-home-"));

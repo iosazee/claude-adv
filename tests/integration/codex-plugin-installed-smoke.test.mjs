@@ -6,8 +6,9 @@
 // Unlike the other integration tests this uses a local mock `claude`, so it
 // needs no network access, no real Claude login, and costs nothing.
 //
-// By default this checks the current checkout. To point at a copied/installed
-// Codex plugin root, set CLAUDE_ADV_CODEX_PLUGIN_ROOT=/path/to/installed/root.
+// By default this checks plugins/claude-adv in the current checkout. To point
+// at a copied/installed Codex plugin root, set
+// CLAUDE_ADV_CODEX_PLUGIN_ROOT=/path/to/installed/root.
 // The test uses a local mock `claude`, so it does not require network access
 // or a real Claude login.
 import { strict as assert } from "node:assert";
@@ -36,13 +37,15 @@ if (process.env.RUN_INTEGRATION_TESTS !== "true") {
 
   function resolvePluginRoot() {
     const configured = process.env.CLAUDE_ADV_CODEX_PLUGIN_ROOT;
-    const root = realpathSync(path.resolve(configured || CHECKOUT_ROOT));
+    const root = realpathSync(
+      path.resolve(configured || path.join(CHECKOUT_ROOT, "plugins/claude-adv"))
+    );
     assert.ok(
       existsSync(path.join(root, ".codex-plugin", "plugin.json")),
       `missing .codex-plugin/plugin.json under ${root}`
     );
     assert.ok(
-      existsSync(path.join(root, "codex", "scripts", "claude-adv-codex.mjs")),
+      existsSync(path.join(root, "scripts", "claude-adv-codex.mjs")),
       `missing codex adapter under ${root}`
     );
     return root;
@@ -94,7 +97,7 @@ EOF
   }
 
   function runAdapter(pluginRoot, args, options = {}) {
-    const adapter = path.join(pluginRoot, "codex", "scripts", "claude-adv-codex.mjs");
+    const adapter = path.join(pluginRoot, "scripts", "claude-adv-codex.mjs");
     return spawnSync(process.execPath, [adapter, ...args], {
       cwd: options.cwd,
       encoding: "utf8",
@@ -197,12 +200,12 @@ EOF
     assert.equal(status.latestFinished, null);
     assert.deepEqual(status.recent, []);
 
-    const adapterPath = path.join(pluginRoot, "codex", "scripts", "claude-adv-codex.mjs");
+    const adapterPath = path.join(pluginRoot, "scripts", "claude-adv-codex.mjs");
     for (const skillName of SKILL_NAMES) {
-      const skillFile = path.join(pluginRoot, "codex", "skills", skillName, "SKILL.md");
+      const skillFile = path.join(pluginRoot, "skills", skillName, "SKILL.md");
       assert.ok(existsSync(skillFile), `missing skill ${skillName}`);
       const skill = readFileSync(skillFile, "utf8");
-      assert.match(skill, /codex\/scripts\/claude-adv-codex\.mjs/);
+      assert.match(skill, /scripts\/claude-adv-codex\.mjs/);
       assert.ok(existsSync(adapterPath), `skill ${skillName} points at missing adapter`);
     }
   });

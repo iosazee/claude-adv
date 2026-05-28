@@ -18,8 +18,9 @@ import { fileURLToPath } from "node:url";
 import { JOB_REFERENCE_ARG_CONFIG } from "../../scripts/lib/args.mjs";
 
 const ROOT = path.resolve(fileURLToPath(import.meta.url), "../../..");
-const ADAPTER = path.join(ROOT, "codex/scripts/claude-adv-codex.mjs");
-const COMPANION = path.join(ROOT, "scripts/claude-companion.mjs");
+const PLUGIN_ROOT = path.join(ROOT, "plugins/claude-adv");
+const ADAPTER = path.join(ROOT, "plugins/claude-adv/scripts/claude-adv-codex.mjs");
+const COMPANION = path.join(ROOT, "plugins/claude-adv/scripts/claude-companion.mjs");
 const RESULT_HANDLER = path.join(ROOT, "scripts/companion-handlers/result.mjs");
 const CANCEL_HANDLER = path.join(ROOT, "scripts/companion-handlers/cancel.mjs");
 
@@ -156,7 +157,7 @@ test("codex adapter delegates setup, preserves cwd, and writes state under CODEX
   const companion = companionRecord(records);
   assert.ok(companion, "expected delegated companion process to be captured");
   assert.equal(realpathSync(companion.cwd), realpathSync(repo));
-  assert.equal(companion.env.CLAUDE_PLUGIN_ROOT, ROOT);
+  assert.equal(companion.env.CLAUDE_PLUGIN_ROOT, PLUGIN_ROOT);
   assert.equal(
     companion.env.CLAUDE_PLUGIN_DATA,
     path.join(realpathSync(codexHome), "state", "claude-adv")

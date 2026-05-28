@@ -25,6 +25,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      - name: Codex bundle in sync
+        run: npm run check:codex-bundle
 
   test:
     runs-on: ${{ matrix.os }}

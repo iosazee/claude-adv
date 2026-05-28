@@ -12,7 +12,7 @@ Use this skill when Codex needs the Claude Adv adapter command surface.
 Resolve `<plugin-root>` in this order:
 
 1. Use user-set `CLAUDE_PLUGIN_ROOT` when it is an absolute path containing `.codex-plugin/plugin.json`.
-2. If Codex exposes this `SKILL.md` path, resolve the `SKILL.md` path with `realpath`, then go three directories up from `codex/skills/claude-adv-runtime/SKILL.md`.
+2. If Codex exposes this `SKILL.md` path, resolve the `SKILL.md` path with `realpath`, then go two directories up from `skills/claude-adv-runtime/SKILL.md` (the plugin root contains `.codex-plugin/plugin.json`).
 3. Otherwise fail and show a Known installs hint from the registry contents.
 
 Codex CLI/CI skill-path exposure is not guaranteed; in CI, set `CLAUDE_PLUGIN_ROOT` explicitly.
@@ -21,13 +21,13 @@ Registry entries are hints only. Do not auto-resolve plugin root from the regist
 ## Commands
 
 ```bash
-node "<plugin-root>/codex/scripts/claude-adv-codex.mjs" setup --json
-node "<plugin-root>/codex/scripts/claude-adv-codex.mjs" review --wait
-node "<plugin-root>/codex/scripts/claude-adv-codex.mjs" adversarial-review --wait
-node "<plugin-root>/codex/scripts/claude-adv-codex.mjs" status
-node "<plugin-root>/codex/scripts/claude-adv-codex.mjs" result <job-id>
-node "<plugin-root>/codex/scripts/claude-adv-codex.mjs" cancel <job-id>
-node "<plugin-root>/codex/scripts/claude-adv-codex.mjs" task <prompt>
+node "<plugin-root>/scripts/claude-adv-codex.mjs" setup --json
+node "<plugin-root>/scripts/claude-adv-codex.mjs" review --wait
+node "<plugin-root>/scripts/claude-adv-codex.mjs" adversarial-review --wait
+node "<plugin-root>/scripts/claude-adv-codex.mjs" status
+node "<plugin-root>/scripts/claude-adv-codex.mjs" result <job-id>
+node "<plugin-root>/scripts/claude-adv-codex.mjs" cancel <job-id>
+node "<plugin-root>/scripts/claude-adv-codex.mjs" task <prompt>
 ```
 
 Use `result <job-id>` and `cancel <job-id>` with explicit ids in CI.

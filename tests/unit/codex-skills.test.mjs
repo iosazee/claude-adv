@@ -5,16 +5,16 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(fileURLToPath(import.meta.url), "../../..");
-const SKILL_ROOT = path.join(ROOT, "codex/skills");
+const SKILL_ROOT = path.join(ROOT, "plugins/claude-adv/skills");
 const SKILLS = ["claude-adv-runtime", "claude-adv-review", "claude-adv-rescue"];
 const RUNTIME_COMMANDS = [
-  'node "<plugin-root>/codex/scripts/claude-adv-codex.mjs" setup --json',
-  'node "<plugin-root>/codex/scripts/claude-adv-codex.mjs" review --wait',
-  'node "<plugin-root>/codex/scripts/claude-adv-codex.mjs" adversarial-review --wait',
-  'node "<plugin-root>/codex/scripts/claude-adv-codex.mjs" status',
-  'node "<plugin-root>/codex/scripts/claude-adv-codex.mjs" result <job-id>',
-  'node "<plugin-root>/codex/scripts/claude-adv-codex.mjs" cancel <job-id>',
-  'node "<plugin-root>/codex/scripts/claude-adv-codex.mjs" task <prompt>',
+  'node "<plugin-root>/scripts/claude-adv-codex.mjs" setup --json',
+  'node "<plugin-root>/scripts/claude-adv-codex.mjs" review --wait',
+  'node "<plugin-root>/scripts/claude-adv-codex.mjs" adversarial-review --wait',
+  'node "<plugin-root>/scripts/claude-adv-codex.mjs" status',
+  'node "<plugin-root>/scripts/claude-adv-codex.mjs" result <job-id>',
+  'node "<plugin-root>/scripts/claude-adv-codex.mjs" cancel <job-id>',
+  'node "<plugin-root>/scripts/claude-adv-codex.mjs" task <prompt>',
 ];
 
 function readSkill(name) {

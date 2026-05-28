@@ -7,16 +7,18 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(fileURLToPath(import.meta.url), "../../..");
-const ADAPTER = path.join(ROOT, "plugins/claude-adv/scripts/claude-adv-codex.mjs");
+const ADAPTER = path.join(ROOT, "codex/scripts/claude-adv-codex.mjs");
+const RELOCATED_ADAPTER = path.join(ROOT, "plugins/claude-adv/scripts/claude-adv-codex.mjs");
 const COMPANION = path.join(ROOT, "plugins/claude-adv/scripts/claude-companion.mjs");
 const MOCK_CLAUDE = path.join(ROOT, "tests/fixtures/mock-claude.sh");
+const GATE = process.env.RUN_INTEGRATION_TESTS === "true";
 const SIGNAL_CODES = Object.freeze({
   SIGHUP: 129,
   SIGINT: 130,
   SIGTERM: 143,
 });
 
-const posixTest = process.platform === "win32" ? test.skip : test;
+const posixTest = process.platform === "win32" || !GATE ? test.skip : test;
 
 function makeRepo() {
   const repo = mkdtempSync(path.join(tmpdir(), "claude-adv-signal-repo-"));
@@ -203,7 +205,7 @@ async function cleanupRun(run, observed) {
   await Promise.race([waitForClose(run.child, { timeoutMs: 1000 }).catch(() => null), delay(1000)]);
 }
 
-posixTest("codex adapter spawns delegated runtime as its own process group leader", async () => {
+posixTest("codex shim spawns delegated runtime as its own process group leader", async () => {
   const run = spawnAdapter();
   let observed;
   try {
@@ -216,7 +218,7 @@ posixTest("codex adapter spawns delegated runtime as its own process group leade
   }
 });
 
-posixTest("adapter SIGTERM forwards SIGTERM to the delegated process group", async () => {
+posixTest("shim SIGTERM forwards SIGTERM to the delegated process group", async () => {
   const run = spawnAdapter();
   let observed;
   try {
@@ -232,7 +234,7 @@ posixTest("adapter SIGTERM forwards SIGTERM to the delegated process group", asy
   }
 });
 
-posixTest("adapter SIGINT exits 130 when the child is killed by SIGINT", async () => {
+posixTest("shim SIGINT exits 130 when the child is killed by SIGINT", async () => {
   const run = spawnAdapter();
   let observed;
   try {
@@ -247,7 +249,7 @@ posixTest("adapter SIGINT exits 130 when the child is killed by SIGINT", async (
   }
 });
 
-posixTest("adapter SIGHUP forwards SIGHUP and exits 129 before escalation", async () => {
+posixTest("shim SIGHUP forwards SIGHUP and exits 129 before escalation", async () => {
   const run = spawnAdapter();
   let observed;
   try {
@@ -262,9 +264,11 @@ posixTest("adapter SIGHUP forwards SIGHUP and exits 129 before escalation", asyn
   }
 });
 
-posixTest("adapter signal path probes a child pid before the spawn event", () => {
-  const source = readFileSync(ADAPTER, "utf8");
+posixTest("shim imports the relocated adapter that owns the signal lifecycle", () => {
+  const shimSource = readFileSync(ADAPTER, "utf8");
+  const source = readFileSync(RELOCATED_ADAPTER, "utf8");
 
+  assert.match(shimSource, /await import\(pathToFileURL\(target\)\.href\)/);
   assert.match(source, /childState\s*=\s*\{\s*child:\s*null,\s*childSpawned:\s*false/s);
   assert.match(source, /childState\.child\s*=\s*child/);
   assert.match(source, /child\.on\("spawn",\s*\(\)\s*=>\s*\{[\s\S]*childSpawned\s*=\s*true/s);

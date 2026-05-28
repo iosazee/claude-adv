@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(fileURLToPath(import.meta.url), "../../..");
-const ADAPTER = path.join(ROOT, "codex/scripts/claude-adv-codex.mjs");
+const ADAPTER = path.join(ROOT, "plugins/claude-adv/scripts/claude-adv-codex.mjs");
 const MOCK_CLAUDE = path.join(ROOT, "tests/fixtures/mock-claude.sh");
 const SMUGGLED_FLAGS = [
   "--allow-resume",

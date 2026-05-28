@@ -11,6 +11,8 @@
     "test": "node --test tests/*.test.mjs tests/*/*.test.mjs",
     "test:unit": "node --test tests/unit/*.test.mjs",
     "test:integration": "node --test tests/integration/*.test.mjs",
+    "sync:codex": "node scripts/release/sync-codex-bundle.mjs",
+    "check:codex-bundle": "node scripts/release/sync-codex-bundle.mjs --check",
     "lint": "biome lint scripts tests",
     "lint:fix": "biome lint --write scripts tests",
     "format": "biome format --write scripts tests",
@@ -19,6 +21,7 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@biomejs/biome": "2.4.15"
+    "@biomejs/biome": "2.4.15",
+    "acorn": "^8.14.0"
   }
 }

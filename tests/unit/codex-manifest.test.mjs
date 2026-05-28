@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(fileURLToPath(import.meta.url), "../../..");
-const MANIFEST_PATH = path.join(ROOT, ".codex-plugin/plugin.json");
+const MANIFEST_PATH = path.join(ROOT, "plugins/claude-adv/.codex-plugin/plugin.json");
 const PACKAGE_PATH = path.join(ROOT, "package.json");
 
 function readJson(file) {
@@ -36,7 +36,7 @@ test("codex manifest parses and mirrors package identity", () => {
 
   assert.equal(manifest.name, packageJson.name);
   assert.equal(manifest.version, packageJson.version);
-  assert.equal(manifest.skills, "./codex/skills/");
+  assert.equal(manifest.skills, "./skills/");
 });
 
 test("codex manifest declares the approved Codex interface", () => {

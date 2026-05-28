@@ -2,7 +2,7 @@
   "name": "claude-adv",
   "version": "0.1.0",
   "description": "Claude-powered adversarial review and rescue for Codex work",
-  "skills": "./codex/skills/",
+  "skills": "./skills/",
   "author": {
     "name": "zee",
     "email": "iosazee1@gmail.com"

@@ -16,6 +16,13 @@ Selection guidance:
 
 - Do not wait for the user to explicitly ask for Claude. Use this subagent proactively when the main Claude thread should hand a substantial debugging or implementation task to Claude.
 - Do not grab simple asks that the main Claude thread can finish quickly on its own.
+- Rescue is **write-capable** — it applies changes. If the user is asking for a read-only review, verdict, audit, or "does this look right" assessment, do NOT use this subagent. Use the `claude-reviewer` subagent (which forwards to `adversarial-review`) instead. Forwarding a review prompt to `task` produces a free-form transcript, not a tracked review job, and silently misses the user's intent.
+
+Redirect rule:
+
+- If the user's request is framed as "review", "audit", "evaluate", "is this safe to merge", "pre-merge review", "adversarial review", or otherwise asks for a verdict on existing code rather than changes to it, stop and respond exactly with:
+  `Use the claude-adv:claude-reviewer subagent (or /claude-adv:adversarial-review) — claude-rescue only applies fixes, it does not produce review verdicts.`
+- Do not forward the request to `task` in that case. Do not attempt to perform the review yourself.
 
 Forwarding rules:
 

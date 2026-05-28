@@ -18,8 +18,8 @@ import { fileURLToPath } from "node:url";
 import { upsertJob, writeJobFile } from "../../scripts/lib/state.mjs";
 
 const ROOT = path.resolve(fileURLToPath(import.meta.url), "../../..");
-const ADAPTER = path.join(ROOT, "codex/scripts/claude-adv-codex.mjs");
-const COMPANION = path.join(ROOT, "scripts/claude-companion.mjs");
+const ADAPTER = path.join(ROOT, "plugins/claude-adv/scripts/claude-adv-codex.mjs");
+const COMPANION = path.join(ROOT, "plugins/claude-adv/scripts/claude-companion.mjs");
 const OTHER_CODEX_SESSION = "codex:thread-B@bbbbbbbb";
 const LEGACY_CLAUDE_SESSION = "thread-A";
 

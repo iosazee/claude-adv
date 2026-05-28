@@ -86,35 +86,53 @@ If `ready: no`, see the [troubleshooting section](#13-troubleshooting).
 
 ### Codex: when to use it, and how
 
-**When.** Use the Codex path when you're in an OpenAI Codex session and want Claude to weigh in on Codex's work — an adversarial or neutral review of the current diff, or a write-capable rescue task. It exists so a Codex user gets the same isolated, fresh-subprocess Claude reviewer that Claude Code users get from the slash commands. If you're inside Claude Code, don't use this — use the `/claude-adv:*` slash commands; the adapter is the Codex-side entry point only.
+Use the Codex path when you're in an OpenAI Codex session and want a Claude second opinion — adversarial/neutral review of the current diff or a write-capable rescue. (Inside Claude Code, use `/claude-adv:*` slash commands instead; the adapter is the Codex-side entry point only.)
 
-**How.** Codex installs use `.codex-plugin/plugin.json` plus the skills under `codex/skills/` (`claude-adv-runtime`, `claude-adv-review`, `claude-adv-rescue`), which shell out to the adapter — or you can call the adapter directly. Claude Code installs, by contrast, use `.claude-plugin/`. Point Codex at the plugin root and run the first check:
-
-```bash
-node "<plugin-root>/codex/scripts/claude-adv-codex.mjs" setup --json
-```
-
-The `claude` CLI must be installed and authenticated for local Codex use:
+Prereq for local use:
 
 ```bash
-npm install -g @anthropic-ai/claude-code
-claude /login
+npm install -g @anthropic-ai/claude-code && claude /login
 ```
 
-The command surface (all foreground — `--background` is rejected):
+#### Install
+
+**A. From the Codex marketplace (recommended).**
+
+In Codex Desktop, open Plugins → Add marketplace. Paste:
+
+- Source: `iosazee/claude-adv`
+- Git ref: `main`
+- Sparse paths (optional): `.agents/plugins\nplugins/claude-adv` (limits checkout; leave blank to clone the full repo)
+
+The plugin appears in the marketplace picker and installs natively. Codex copies `plugins/claude-adv/` to `~/.codex/plugins/cache/<marketplace>/claude-adv/<version>/`.
+
+**B. Direct adapter (cloned checkout).**
 
 ```bash
-node "<plugin-root>/codex/scripts/claude-adv-codex.mjs" adversarial-review --wait [focus…]
-node "<plugin-root>/codex/scripts/claude-adv-codex.mjs" review --wait
-node "<plugin-root>/codex/scripts/claude-adv-codex.mjs" task <prompt>      # write-capable rescue
-node "<plugin-root>/codex/scripts/claude-adv-codex.mjs" status <job-id>
-node "<plugin-root>/codex/scripts/claude-adv-codex.mjs" result <job-id>
-node "<plugin-root>/codex/scripts/claude-adv-codex.mjs" cancel <job-id>
+git clone https://github.com/iosazee/claude-adv.git
+PLUGIN_ROOT="<checkout>/plugins/claude-adv"
+node "$PLUGIN_ROOT/scripts/claude-adv-codex.mjs" setup --json
 ```
 
-Constraints specific to this path: no Stop-gate hooks run, and in CI (`CODEX_CI` set) `status`/`result`/`cancel` require an explicit job id while `review`/`adversarial-review`/`task` run a setup preflight first (exit 78 if `claude` is missing or unauthenticated — see [§11](#11-switch-between-auth-modes)). State lives under `CODEX_HOME` (`$CODEX_HOME/state/claude-adv/…`), so separate `CODEX_HOME` values are the supported isolation boundary between roles or CI jobs — see [§8](#8-run-reviews-in-the-background).
+The path moved from `codex/scripts/claude-adv-codex.mjs` to `plugins/claude-adv/scripts/claude-adv-codex.mjs` in this release. A backwards-compatibility shim at the old path continues to work for one release with a stderr deprecation notice.
 
-Codex Desktop exposes absolute `SKILL.md` paths in observed builds, but Codex CLI/CI skill-path exposure is not guaranteed. In CI or any host that cannot resolve the skill path, set `CLAUDE_PLUGIN_ROOT=/path/to/claude-adv` explicitly before invoking the adapter.
+Adapter command surface (all foreground — `--background` is rejected):
+
+```bash
+ADAPTER="<plugin-root>/scripts/claude-adv-codex.mjs"
+node "$ADAPTER" setup --json
+node "$ADAPTER" adversarial-review --wait [focus…]
+node "$ADAPTER" review --wait
+node "$ADAPTER" task <prompt>           # write-capable rescue
+node "$ADAPTER" {status|result|cancel} <job-id>
+```
+
+Constraints on this path:
+
+- **No Stop-gate hooks** ship.
+- **CI mode** (`CODEX_CI` set): `status`/`result`/`cancel` require an explicit job id; `review`/`adversarial-review`/`task` run a setup preflight first (exit 78 if `claude` is missing or unauthenticated — see [§11](#11-switch-between-auth-modes)).
+- **State** lives under `$CODEX_HOME/state/claude-adv/…`, so separate `CODEX_HOME` values are the supported isolation boundary between roles or CI jobs — see [§8](#8-run-reviews-in-the-background).
+- **Skill path**: Codex Desktop exposes absolute `SKILL.md` paths in observed builds; CLI/CI exposure is not guaranteed. If the host can't resolve the path, set `CLAUDE_PLUGIN_ROOT=/path/to/claude-adv/plugins/claude-adv` before invoking the adapter from a checkout.
 
 ### Manual Codex installed-plugin smoke
 
@@ -220,49 +238,47 @@ Default scope is `auto`, which picks working-tree if dirty, else the current bra
 
 ## 5. Review a large feature branch (raise the inline-diff caps)
 
-The reviewer subprocess runs with locked `--tools ""` and cannot fetch the diff itself. The runtime inlines the diff into the prompt up to two caps: **262 144 bytes (256 KiB) total** and **65 536 bytes (64 KiB) per file**. Either cap exceeded → the runtime drops to **self-collect mode**, gives the reviewer only file names and stats, and the paper-approve safeguard converts any approve verdict to `needs-attention` with a synthetic finding (because a verdict based on file names alone is not a real review).
+The reviewer runs with locked `--tools ""` and cannot fetch the diff itself. The runtime inlines the diff into the prompt up to two caps: **256 KiB total** and **64 KiB per file**. Exceeding either drops to **self-collect mode** (file names and stats only) — and the paper-approve safeguard converts any `approve` to `needs-attention` with a synthetic finding, since a verdict on file names isn't a real review.
 
-For substantial feature branches that exceed the defaults, raise the caps per-invocation:
+Raise the caps per-invocation:
 
 ```bash
-# Default 256 KiB total is too small for a medium feature branch; raise to 1 MiB
-/claude-adv:adversarial-review --wait --scope branch \
-  --max-inline-bytes 1048576
+# 1 MiB total — handles a medium feature branch
+/claude-adv:adversarial-review --wait --scope branch --max-inline-bytes 1048576
 
-# Larger branch: bump the per-file cap too if any single file has a big diff
+# Larger branch with one big file: bump per-file too
 /claude-adv:adversarial-review --wait --scope branch \
-  --max-inline-bytes 2097152 \
-  --max-inline-file-bytes 524288
+  --max-inline-bytes 2097152 --max-inline-file-bytes 524288
 ```
 
-**What you can actually fit:** Opus 4.7's 1M context window leaves roughly ~900K tokens of diff budget after prompt overhead, which is ~3 MiB of code text numerically. The runtime will let you set caps up to that ceiling, but quality is the real constraint, not bytes:
+**Ceiling.** Opus 4.7's 1M context leaves ~900K tokens (~3 MiB) for diff after prompt overhead. The runtime allows caps up to that, but quality degrades before bytes do:
 
-| Branch size | Suggested cap | Verdict |
-|---|---|---|
-| Small (5-20 files, <100 KiB) | Default 262144 | Works out of the box |
-| Medium (20-50 files, 100-500 KiB) | `--max-inline-bytes 524288` | Fits, quality solid |
-| Large (50-150 files, 500 KiB-1.5 MiB) | `--max-inline-bytes 1572864 --max-inline-file-bytes 262144` | Fits, but the reviewer's coverage of subtle cross-file issues degrades. `approve-with-notes` is robust because severity×confidence filtering still calibrates well; raw approvals get less reliable |
-| Worktree-sized (150+ files, multi-MiB) | Even with caps lifted, structurally wrong tool | Prefer scoped reviews per logical area (see below) |
+| Branch size                      | Suggested cap                                                | Verdict                                                          |
+| -------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------- |
+| Small (5–20 files, <100 KiB)     | Default 262144                                               | Works out of the box                                             |
+| Medium (20–50 files, 100–500 KiB) | `--max-inline-bytes 524288`                                  | Fits, quality solid                                              |
+| Large (50–150 files, 0.5–1.5 MiB) | `--max-inline-bytes 1572864 --max-inline-file-bytes 262144`  | Fits, but cross-file coverage degrades. `approve-with-notes` is still robust (severity×confidence calibrates well); raw approvals get less reliable |
+| Worktree-sized (150+ files)      | Wrong tool even with caps lifted                             | Prefer scoped reviews per logical area (below)                   |
 
-**Cost:** at Opus 4.7 input pricing, a 1 MiB diff is roughly $1 per review pass. Iterate-to-approve runs the verification pass at convergence, doubling that. Plan for $2-4 per converged iteration on large branches.
+**Cost.** At Opus 4.7 input pricing, ~$1 per 1 MiB diff. Iterate-to-approve doubles this at convergence (verification pass). Plan for $2–4 per converged iteration on large branches.
 
-**When the right answer is scoping, not raising caps:**
+**When scoping beats raising caps:**
 
-- **Narrow `--base` to a sub-range.** If the branch has natural checkpoints (a sibling feature merged first, a tagged commit, a logical phase boundary), point `--base` at it to review only the recent slice:
+- **Narrow `--base` to a sub-range** — point at a sibling-feature merge, a tagged commit, or a phase boundary to review only the recent slice:
   ```bash
   /claude-adv:adversarial-review --wait --base auth-checkpoint --scope branch
   ```
-- **Walk commits.** For a long branch where commits are themselves logical units:
+- **Walk commits** for a long branch where commits are themselves logical units:
   ```bash
   git rev-list main..HEAD --reverse | while read sha; do
     /claude-adv:adversarial-review --wait --base "${sha}^" --scope branch --json \
       > "/tmp/review-${sha}.json"
   done
   ```
-  Trade-off: cross-commit issues (a bug introduced in commit A, amplified in commit C) won't be caught by either review in isolation. Use scoped reviews when commits are independent slices; raise the cap when they aren't.
-- **Working-tree vs branch separately.** Long-running branch with uncommitted edits? `--scope working-tree` and `--scope branch` review the two halves independently. Smaller per-invocation, easier to reason about.
+  Trade-off: cross-commit issues (bug in A, amplified in C) get missed. Scope when commits are independent; raise the cap when they aren't.
+- **Working-tree vs branch separately** — `--scope working-tree` and `--scope branch` review the two halves independently. Easier to reason about.
 
-Invalid values throw rather than silently falling back to defaults — `--max-inline-bytes 0` or `--max-inline-bytes huge` will exit non-zero with a clear error. That's deliberate: a typo silently absorbing to the default would let you think you raised the cap and get a self-collect demotion anyway.
+Invalid cap values throw rather than silently falling back — `--max-inline-bytes 0` or `huge` exits non-zero with a clear error. Deliberate: a silent fallback would let a typo demote you to self-collect mode without warning.
 
 ---
 
@@ -294,7 +310,7 @@ The gate respects the `maxBudgetUsd` cap and skips work when the porcelain-v2 co
 
 ## 7. Delegate a hard task to the rescue subagent
 
-When you (or the implementing Claude) is stuck on something — couldn't get tests to pass, can't see why a refactor is breaking, has been chasing the same bug across several turns — hand it off to the rescue subagent:
+When you (or the implementing Claude) is stuck — tests won't pass, a refactor is breaking, the same bug keeps coming back across turns — hand it off:
 
 ```bash
 /claude-adv:rescue Rewrite the retry logic in src/queue.ts so it handles partial-failure
@@ -302,16 +318,17 @@ correctly. Existing tests in test/queue.spec.ts MUST still pass.
 The current code panics on a 503 from the upstream API.
 ```
 
-The rescue subagent (`claude-rescue`) shapes your prompt with context, then forwards to `claude-companion.mjs task` which spawns a fresh `claude` subprocess (with `--bare` on API-key auth) via `buildRescueArgs`. That subprocess:
+The `claude-rescue` subagent shapes your prompt with context, then forwards to `claude-companion.mjs task`, which spawns a fresh `claude` subprocess (with `--bare` on API-key auth) via `buildRescueArgs`. That subprocess:
 
-- Has write access to the working directory (no `--tools ""`).
-- Has `--permission-mode bypassPermissions` (locked, not overridable). This lets rescue run `npm test`, `npx biome check`, `git diff`, and other verifiers on its own work — the prompt asks it to do so before summarizing. Trust boundary: rescue is invoked deliberately (slash command or another agent's explicit delegation), the system prompt is locked to `prompts/rescue.md`, and the threat surface beyond plain file-edit access is shell execution in the workspace.
-- Has its own session, no carryover from your current Claude Code conversation.
-- Inherits **no** project hooks or `settings.json` (`--setting-sources ""` is locked on every path). On API-key auth, `--bare` additionally strips user-level plugins, CLAUDE.md auto-discovery, and credential-store reads.
+- **Writes files** (no `--tools ""`) and runs verifiers (`npm test`, `git diff`, etc.) via `--permission-mode bypassPermissions` (locked). The prompt asks it to verify before summarizing.
+- **Own session**, no carryover from your Claude Code conversation.
+- **No project hooks or `settings.json`** (`--setting-sources ""` locked everywhere). On API-key auth, `--bare` additionally strips user-level plugins, CLAUDE.md auto-discovery, and credential-store reads.
 
-When rescue finishes, its output is returned **verbatim** — the `claude-result-handling` skill enforces that no other agent paraphrases or summarizes it.
+Trust boundary: rescue is invoked deliberately (slash command or explicit Agent delegation), the system prompt is locked to `prompts/rescue.md`, and the threat surface beyond plain file edits is shell execution in the workspace.
 
-**Tip:** A good rescue prompt names files in scope, lists what was already tried, and states an explicit done-condition ("tests pass", "function returns the expected value for these inputs"). The `opus-prompting` skill in this plugin documents the pattern.
+Output is returned **verbatim** — the `claude-result-handling` skill prevents downstream agents from paraphrasing or summarizing it.
+
+**Tip:** Good rescue prompts name the files in scope, list what was already tried, and state an explicit done-condition ("tests pass", "function returns expected value for these inputs"). See the `opus-prompting` skill for the pattern.
 
 ---
 
@@ -402,73 +419,67 @@ All three values persist to the workspace state file, which lives at `$CLAUDE_PL
 
 ## 11. Switch between auth modes
 
-`/claude-adv:setup --json` reports `auth.authMethod`. Three modes are supported:
+`/claude-adv:setup --json` reports `auth.authMethod`. Three modes:
 
 ### Claude Code subscription (Max plan)
 
-This is the default if you've run `claude /login`. On subscription auth the reviewer is spawned **without `--bare`**, so the inner `claude` reads your OAuth credentials from its own credential store natively (the macOS Keychain, or the `claude` CLI's equivalent on Linux/WSL2) — there's no token extraction or injection. Isolation on this path comes from the other locked invariants (`--tools ""`, `--setting-sources ""`, `--no-session-persistence`, locked system prompt) plus a controlled temp working directory; see [Authentication paths (subscription vs API key)](#authentication-paths-subscription-vs-api-key) below for the full breakdown.
+Default if you've run `claude /login`. Reviewer is spawned **without `--bare`**, so the inner `claude` reads OAuth credentials from its own credential store (macOS Keychain or equivalent on Linux/WSL2) — no token extraction or injection. Isolation comes from the other locked invariants (`--tools ""`, `--setting-sources ""`, `--no-session-persistence`, locked system prompt) plus a controlled temp `cwd`. See [Authentication paths](#authentication-paths-subscription-vs-api-key) for the full breakdown.
 
-No per-call charges; reviews count against your subscription rate limits.
+No per-call charges; reviews count against subscription rate limits.
 
 ### Anthropic API key
 
-Set `ANTHROPIC_API_KEY=sk-ant-api03-...` in your shell or process env. The plugin sees it and passes it through unchanged. Metered.
+Export `ANTHROPIC_API_KEY=sk-ant-api03-...`. The plugin passes it through unchanged. Metered.
 
 ### Codex CI
 
-In CI, provide `ANTHROPIC_API_KEY` or another documented Claude CLI auth environment accepted by `claude`. Adapter-detected CI mode runs a setup preflight before `review`, `adversarial-review`, and `task`.
+Provide `ANTHROPIC_API_KEY` (or any auth env the `claude` CLI accepts). Adapter-detected CI mode runs a setup preflight before `review`, `adversarial-review`, and `task`. `status`/`result`/`cancel` require explicit job ids — default-scoped lookup is disabled because CI containers can share host boot fingerprints and lack reliable interactive session scope.
 
-Under CI mode, `status`, `result`, and `cancel` require explicit job ids. Default-scoped lookup is intentionally disabled because CI containers can share host boot fingerprints and do not provide a reliable interactive session scope.
-
-CI preflight failures exit 78 with one of these reason codes:
+Preflight failures exit 78 with a reason code:
 
 - `claude-missing` — install or expose the `claude` CLI.
 - `auth-missing` — authenticate or provide CI credentials.
 - `auth-invalid` — refresh invalid or expired credentials.
-- `auth-unknown` — malformed, unrecognized, or transient auth probe failure; retry or investigate separately from normal unauthenticated state.
-- `setup-timeout` — setup preflight did not finish in time.
-- `setup-malformed` — setup returned non-JSON, non-zero, or an inconsistent readiness payload.
+- `auth-unknown` — malformed/unrecognized/transient probe failure; retry or investigate.
+- `setup-timeout` — preflight didn't finish in time.
+- `setup-malformed` — non-JSON, non-zero, or inconsistent readiness payload.
 
 ### Bedrock / Vertex / Foundry
 
-Set the provider's credentials per the standard `claude` CLI documentation. The plugin doesn't intermediate; the inner `claude` subprocess picks them up from env or settings.
+Set the provider's credentials per standard `claude` CLI docs. The plugin doesn't intermediate; the inner subprocess picks them up from env or settings.
 
 ---
 
 ## 12. Iterate a review to approval
 
-The default workflow is one-shot: you submit a diff, the reviewer returns a verdict with findings, you triage them, you ship. That's how the plugin was designed — a tough single critic, calibrated to find things, not to validate.
+Default workflow is one-shot: submit diff → verdict + findings → triage → ship. The plugin is designed as a tough single critic, calibrated to find things, not to validate.
 
-If you want to iterate — edit your diff in response to findings, then re-review, repeat until the reviewer signs off — pass the prior review's JSON output back in via `--continue`. The verdict has three values, not two:
+To iterate (edit in response to findings, re-review, repeat until sign-off), pass the prior review's JSON back via `--continue`. The verdict has three values:
 
-| Verdict              | Meaning                                                                                                                                                                                                    |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `approve`            | No findings. Ship it.                                                                                                                                                                                      |
-| `approve-with-notes` | All remaining findings are severity ≤ `medium` AND confidence ≤ 0.7. The reviewer can't defend any of them strongly enough to block on. Ship it; address the notes if you want, or open follow-up tickets. |
-| `needs-attention`    | At least one finding is `critical`/`high`, or confidence > 0.7. A careful engineer would block.                                                                                                            |
+| Verdict              | Meaning                                                                                                                              |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `approve`            | No findings. Ship it.                                                                                                                |
+| `approve-with-notes` | All remaining findings are severity ≤ `medium` AND confidence ≤ 0.7 — the reviewer can't defend any strongly enough to block. Ship; address notes or open follow-ups. |
+| `needs-attention`    | At least one finding is `critical`/`high`, or confidence > 0.7. A careful engineer would block.                                      |
 
 The loop terminates on `approve` or `approve-with-notes`. Both pass the Stop-gate; only `needs-attention` blocks.
 
-Why three states instead of two: the adversarial reviewer is calibrated to find things. With only `approve` / `needs-attention`, anything defensible held the verdict at `needs-attention` and iterate-to-approve loops never converged. The `approve-with-notes` band makes the verdict a calibrated judgment (severity × confidence) rather than an absolute one, so the loop has a fixed point.
+Why three states: the adversarial reviewer is calibrated to find things. With only `approve`/`needs-attention`, anything defensible held the verdict at `needs-attention` and iterate-to-approve never converged. The `approve-with-notes` band makes the verdict a calibrated judgment (severity × confidence), so the loop has a fixed point.
 
 ### "Approved means approved": automatic final verification
 
-`--continue` passes prior findings into the next review as context. By itself that creates a subtle problem: the reviewer reads "these were addressed" and is more likely to suppress findings it would otherwise raise — including legitimate high-severity ones. The verdict reported back can be `approve-with-notes` even when an unbiased reviewer would say `needs-attention`.
+`--continue` passes prior findings as context, which biases the reviewer: reading "these were addressed" makes it more likely to suppress findings it would otherwise raise, including legitimate high-severity ones. So the runtime **automatically runs a fresh unbiased verification pass** whenever a `--continue` review concludes `approve` or `approve-with-notes`:
 
-To close that gap, the runtime **automatically runs a fresh independent verification pass** whenever a `--continue` review concludes with `approve` or `approve-with-notes`:
+1. Primary runs with `--continue` context (prior findings).
+2. If verdict is `needs-attention`, return it — the primary already says "block."
+3. Otherwise, spawn one more review with the **same diff and prompt** but **without any prior-findings context** — a clean adversarial pass with no "probably resolved" bias.
+4. The fresh review's verdict is returned. The primary is preserved under `continueAttempt`.
 
-1. Primary review runs with the `--continue` context, including the prior findings.
-2. If the verdict is `needs-attention`, that's authoritative and the runtime returns it (the primary already says "block"; no point spending another model call).
-3. If the verdict is `approve` or `approve-with-notes`, the runtime spawns one more review with the **same diff** and the **same prompt** but **without any prior-findings context**. This is a clean adversarial pass from a reviewer with no bias toward "this was probably resolved."
-4. The fresh review's verdict is what gets returned. The primary review is preserved in the payload under `continueAttempt` so you can inspect both.
+`approve-with-notes` from an iterate-to-approve loop therefore means: a biased AND an unbiased reviewer both looked, neither found anything defensible at high severity or high confidence. A `--continue` review alone never produces an authoritative approval.
 
-So `approve-with-notes` from an iterate-to-approve loop means: at least one biased reviewer AND at least one independent unbiased reviewer both looked at the artifact and neither found anything they could defend at high severity or high confidence. A `--continue` review alone never produces an authoritative approval.
+Cost: ~2× a single review at convergence, 1× while still `needs-attention`. Loops typically end in 1–3 converged iterations, so total cost is bounded.
 
-The cost trade-off: at convergence, each iteration costs ~2× a single review. Non-convergent iterations (still `needs-attention`) cost 1×. In practice the loop ends with 1–3 convergence iterations, so total cost is well-bounded.
-
-`prompts/adversarial-review.md` also instructs the `--continue` reviewer to conduct an independent adversarial pass _first_ and cross-reference against the prior list only for deduplication, not as a list of things to skip. That's a soft constraint — the verification pass is the hard one.
-
-The rest of this section is the operational recipe plus the when-to / when-not-to.
+`prompts/adversarial-review.md` also tells `--continue` reviewers to do an independent adversarial pass _first_ and cross-reference the prior list only for deduplication — a soft constraint backstopped by the hard verification pass.
 
 ```bash
 # Iteration 1: write JSON output to a file you can feed back in.
@@ -486,21 +497,21 @@ cat /tmp/r1.json | jq '.review_output.verdict, (.review_output.findings | length
 # Repeat until the verdict is approve or approve-with-notes.
 ```
 
-Use the per-finding `fingerprint` (`sha1(file:line_start:normalized_title)[:16]`) to spot when the same concern recurs across iterations — a sign the fix didn't actually resolve the underlying issue. When a `--continue` run ends in `approve`/`approve-with-notes`, the runtime spawns one more unbiased pass automatically; the verification verdict is authoritative and both attempts are preserved under `.continueAttempt` / `.finalVerification`, so each terminal iteration costs ~2× a single review.
+Use the per-finding `fingerprint` (`sha1(file:line_start:normalized_title)[:16]`) to spot the same concern recurring across iterations — a sign the fix didn't resolve the underlying issue. Verification verdict and both attempts are preserved under `.continueAttempt` / `.finalVerification`.
 
 **When iterate-to-approve is the wrong tool:**
 
-- Routine code review of a PR. Use single-shot. The first review is the highest-signal one; iterating mostly produces marginal findings.
-- Approving someone else's diff. The reviewer never agrees absolutely; the human approves.
-- Locking down a design decision. Iterating with the reviewer is useful for surfacing real gaps, but at some point you're polishing the spec for the reviewer rather than for the implementer.
+- **Routine PR review.** Use single-shot — the first review is the highest-signal; iterating produces marginal findings.
+- **Approving someone else's diff.** The reviewer never agrees absolutely; the human approves.
+- **Locking down a design decision.** Useful for surfacing real gaps, but eventually you're polishing the spec for the reviewer rather than the implementer.
 
 **When it's the right tool:**
 
-- Drafting a load-bearing design spec or architecture doc where missed gaps are expensive. Run the loop until `approve-with-notes`, then ship.
-- A complex diff where you want a strict triage pass and a "did I address the real things?" pass before requesting human review.
+- Drafting a load-bearing design spec where missed gaps are expensive. Loop until `approve-with-notes`, ship.
+- Complex diffs where you want a strict triage pass plus a "did I address the real things?" pass before human review.
 - Pre-merge cleanup on a long-running branch.
 
-The `validateAndNormalizeReview` calibration is opinionated: severity × confidence. If the reviewer says critical/high or confidence > 0.7, the loop won't terminate until you address that finding (or push back via the diff so the reviewer drops it on the next pass). That's by design — see the section on verdict-selection rules in `prompts/adversarial-review.md`.
+The `validateAndNormalizeReview` calibration is opinionated (severity × confidence): if the reviewer says critical/high or confidence > 0.7, the loop won't terminate until you address that finding (or push back via the diff so the reviewer drops it). By design — see verdict-selection rules in `prompts/adversarial-review.md`.
 
 ---
 
@@ -534,15 +545,15 @@ If that hangs or says "Not logged in", `--bare` mode is rejecting your auth. Fix
 
 ### Authentication paths (subscription vs API key)
 
-The plugin auto-detects which auth path the reviewer subprocess should take. You don't need to configure anything — both paths just work:
+Auto-detected per spawn. Both paths just work:
 
-- **Subscription auth** (you're logged in to `claude.ai` via `claude /login`): the reviewer is spawned **without `--bare`** so the inner `claude` can read its own OAuth credential store. The runtime also spawns the subprocess from a controlled temp `cwd` to suppress project `CLAUDE.md` auto-discovery. Safety properties that survive: locked `--tools ""` (no tool access), locked `--setting-sources ""` (no hooks, no project settings), locked `--no-session-persistence`, locked `--system-prompt-file`. Surface that remains: user-level `~/.claude/CLAUDE.md` and user-installed plugins may be loaded into the subprocess context, but with `--tools ""` they cannot materially affect verdict behavior.
+- **Subscription** (`claude /login`): reviewer spawned **without `--bare`**, so the inner `claude` reads its OAuth credential store natively. Subprocess `cwd` is a controlled temp dir to suppress project `CLAUDE.md` auto-discovery. Surviving locks: `--tools ""`, `--setting-sources ""`, `--no-session-persistence`, `--system-prompt-file`. Remaining surface: user-level `~/.claude/CLAUDE.md` and plugins may load into the subprocess context, but with `--tools ""` they can't materially affect verdicts.
 
-- **API-key auth** (you've exported `ANTHROPIC_API_KEY=sk-ant-…` OR configured `apiKeyHelper` in `~/.claude/settings.json`): the reviewer is spawned **with `--bare`** for strongest isolation. `--bare` strips everything in one flag: plugins, hooks, settings, credential-store reads, `CLAUDE.md` auto-discovery, auto-memory. This is the highest-isolation mode.
+- **API-key** (`ANTHROPIC_API_KEY` exported OR `apiKeyHelper` in `~/.claude/settings.json`): reviewer spawned **with `--bare`** — strips plugins, hooks, settings, credential-store reads, `CLAUDE.md` auto-discovery, and auto-memory in one flag. Highest-isolation mode.
 
-The mechanism: `detectReviewerAuthClass()` checks `env.ANTHROPIC_API_KEY` and user-level `apiKeyHelper` at every spawn. If either resolves to a usable key, `useBare=true`. Otherwise `useBare=false`. The argv builders take `useBare` as a required parameter (no default), so every call site has to visibly choose.
+Mechanism: `detectReviewerAuthClass()` checks `env.ANTHROPIC_API_KEY` and user-level `apiKeyHelper` at every spawn. Either resolving to a usable key → `useBare=true`. Argv builders require `useBare` as a parameter (no default), so call sites have to choose visibly.
 
-If you want subscription users on your machine to get the strongest isolation, export `ANTHROPIC_API_KEY` or configure `apiKeyHelper`. Both produce identical results (same `--bare` argv) — the only difference is where the API key comes from.
+For strongest isolation on a subscription machine, export `ANTHROPIC_API_KEY` or configure `apiKeyHelper`. Both yield identical `--bare` argv — only the key source differs.
 
 `apiKeyHelper` example (`~/.claude/settings.json`):
 
@@ -552,7 +563,7 @@ If you want subscription users on your machine to get the strongest isolation, e
 }
 ```
 
-The helper script must print the API key to stdout and exit 0. claude-adv only consults `~/.claude/settings.json` and `~/.claude/settings.local.json` — never the project's `.claude/settings.json`, since that file can be planted by an attacker controlling the workspace.
+The helper prints the API key to stdout and exits 0. claude-adv only consults `~/.claude/settings.json` and `~/.claude/settings.local.json` — never the project's `.claude/settings.json`, since that can be planted by an attacker controlling the workspace.
 
 ### Review returns `verdict: "approve"` on a known-buggy diff
 
@@ -656,9 +667,9 @@ npm install        # no runtime deps; just creates package-lock.json
 npm test           # CI-safe tests, no real claude calls
 ```
 
-CI-safe tests use a `tests/fixtures/mock-claude.sh` script that fakes `stream-json` output, so they don't make real `claude` calls. All `claude` interactions in CI are mocked.
+CI-safe tests use `tests/fixtures/mock-claude.sh` to fake `stream-json` output, so no real `claude` calls run in CI.
 
-Real-claude integration tests live in `tests/integration/`, gated behind `RUN_INTEGRATION_TESTS=true` so `npm test`/CI skip them. Each one costs $0.001–$0.02 against `claude-haiku-4-5`. Run them manually before releases:
+Real-claude integration tests in `tests/integration/` are gated behind `RUN_INTEGRATION_TESTS=true` (`npm test`/CI skip them). Each costs $0.001–$0.02 against `claude-haiku-4-5`. Run manually before releases:
 
 ```bash
 RUN_INTEGRATION_TESTS=true node --test tests/integration/
@@ -677,7 +688,7 @@ The Codex installed-plugin smoke (`codex-plugin-installed-smoke`) is mock-backed
 
 ### Changing argv invariants, prompts, or schema
 
-If you change argv invariants, prompts, or schema, the affected golden tests in `tests/unit/claude-cli.builder.test.mjs` must be updated in the same commit. The locked-invariant set is enforced by tests that assert callers can't override forbidden keys — if you weaken those, the whole isolation story weakens with them.
+Any such change must update the affected golden tests in `tests/unit/claude-cli.builder.test.mjs` in the same commit. The locked-invariant set is enforced by tests asserting callers can't override forbidden keys — weaken those and the isolation story weakens with them.
 
 ### Layout reminder
 
@@ -695,7 +706,7 @@ The dispatcher uses lazy `import()` so a misbehaving handler doesn't break `--he
 
 ## 16. Command and flag reference
 
-The review/status/result/cancel command files are marked **explicit-invocation only** (`disable-model-invocation: true`). `setup` and `rescue` stay normally invokable because setup is the readiness entrypoint and rescue is also reachable as a subagent, but the intended surface is still deliberate: you invoke commands, or a supervising agent runs them as Bash/slash calls.
+`review`, `adversarial-review`, `status`, `result`, and `cancel` are marked **explicit-invocation only** (`disable-model-invocation: true`). `setup` and `rescue` stay model-invocable — setup is the readiness entry point, and rescue has a subagent route (`claude-adv:claude-rescue`). For adversarial review from agent code, use the `claude-adv:claude-reviewer` subagent; see [§17](#17-for-agents-and-scripting).
 
 | Command                                   | Flags                                                                                                                                                                                                |
 | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -757,4 +768,35 @@ All commands emit machine-readable output with `--json`.
 | Stop-time gate hook           | `2`  | **Block** — an explicit `needs-attention` verdict            |
 | Stop-time gate hook           | `0`  | Pass, no change, or any internal error (the gate fails open) |
 
-**Delegating from another agent.** `/claude-adv:rescue` forwards to the `claude-adv:claude-rescue` subagent — invoke it via the `Agent` tool with `subagent_type: "claude-adv:claude-rescue"`, not as a skill. The reviewer commands are not model-invocable; a supervising agent runs them as shell/slash calls and parses the JSON.
+### Pick the right entry point
+
+Three surfaces, easy to confuse. Picking wrong fails silently — `rescue` accepts a "review my diff" prompt, burns tokens on a free-form transcript, and never registers a tracked review job.
+
+| You want…                                                  | User slash command               | Agent subagent (`Agent` tool) | Subcommand           | Writes? | Job ID prefix          |
+| ---------------------------------------------------------- | -------------------------------- | ----------------------------- | -------------------- | ------- | ---------------------- |
+| Adversarial verdict on the diff (BLOCK/FLAG/APPROVE)       | `/claude-adv:adversarial-review` | `claude-adv:claude-reviewer`  | `adversarial-review` | No      | `adversarial-review-…` |
+| Neutral verdict on the diff                                | `/claude-adv:review`             | — (shell out via Bash)        | `review`             | No      | `review-…`             |
+| Claude to apply fixes (after a review, or for any task)    | `/claude-adv:rescue`             | `claude-adv:claude-rescue`    | `task`               | Yes     | `task-…`               |
+
+> **Misuse signal.** `/claude-adv:status` shows no record after you "started a review" → you invoked rescue. Rescue forwards to `task` (separate tracker, free-form transcript, no `review_output` JSON).
+
+**Iterate-to-approve.** `adversarial-review --background` → poll `/claude-adv:status <id>` → read `/claude-adv:result <id>`. On `needs-attention`, fix manually or hand the findings JSON to `/claude-adv:rescue`, then re-run `adversarial-review`. Repeat until `approve`. There is no built-in orchestrator; the commands are deliberately separate.
+
+### Invoking from agent code
+
+All reviewer slash commands (`review`, `adversarial-review`, `status`, `result`, `cancel`) are marked `disable-model-invocation: true`, so `Skill(claude-adv:adversarial-review)` errors with `cannot be used with Skill tool`. Agent routes:
+
+- **`adversarial-review`** → `Agent({ subagent_type: "claude-adv:claude-reviewer", … })`
+- **`task` (rescue)** → `Agent({ subagent_type: "claude-adv:claude-rescue", … })`
+- **`review`, `status`, `result`, `cancel`** → no subagent wrapper; shell out via Bash
+
+`${CLAUDE_PLUGIN_ROOT}` is populated only inside slash-command bodies. In an agent's Bash call it expands to empty, silently producing `Cannot find module '/scripts/claude-companion.mjs'`. Resolve the path dynamically — the installed location is `~/.claude/plugins/cache/claude-adv/claude-adv/<version>/`, and the version segment changes across releases:
+
+```bash
+PLUGIN_DIR="$(ls -td ~/.claude/plugins/cache/claude-adv/claude-adv/*/ | head -1)"
+node "${PLUGIN_DIR%/}/scripts/claude-companion.mjs" adversarial-review --wait --base main --scope branch
+node "${PLUGIN_DIR%/}/scripts/claude-companion.mjs" status <job-id>
+node "${PLUGIN_DIR%/}/scripts/claude-companion.mjs" result <job-id> --json
+```
+
+For `claude --plugin-dir ./claude-adv` installs, point at the clone (`node "/path/to/claude-adv/scripts/claude-companion.mjs" …`). The Codex adapter at `plugins/claude-adv/scripts/claude-adv-codex.mjs` resolves its plugin root from its own file path and needs no env var.

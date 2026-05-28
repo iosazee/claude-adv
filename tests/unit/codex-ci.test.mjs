@@ -14,8 +14,8 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(fileURLToPath(import.meta.url), "../../..");
-const ADAPTER = path.join(ROOT, "codex/scripts/claude-adv-codex.mjs");
-const COMPANION = path.join(ROOT, "scripts/claude-companion.mjs");
+const ADAPTER = path.join(ROOT, "plugins/claude-adv/scripts/claude-adv-codex.mjs");
+const COMPANION = path.join(ROOT, "plugins/claude-adv/scripts/claude-companion.mjs");
 const MOCK_CLAUDE = path.join(ROOT, "tests/fixtures/mock-claude.sh");
 const CI_REASON_PAYLOADS = Object.freeze({
   "claude-missing": {

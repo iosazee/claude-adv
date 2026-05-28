@@ -8,15 +8,16 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { buildAdapterEnv } from "../../codex/scripts/lib/codex-env.mjs";
+import { buildAdapterEnv } from "../../plugins/claude-adv/scripts/lib/codex-env.mjs";
 import {
   registryPathForCodexHome,
   touchPluginInstallRegistry,
-} from "../../codex/scripts/lib/codex-registry.mjs";
+} from "../../plugins/claude-adv/scripts/lib/codex-registry.mjs";
 
 const ROOT = path.resolve(fileURLToPath(import.meta.url), "../../..");
-const ADAPTER = path.join(ROOT, "codex/scripts/claude-adv-codex.mjs");
-const COMPANION = path.join(ROOT, "scripts/claude-companion.mjs");
+const PLUGIN_ROOT = path.join(ROOT, "plugins/claude-adv");
+const ADAPTER = path.join(ROOT, "plugins/claude-adv/scripts/claude-adv-codex.mjs");
+const COMPANION = path.join(ROOT, "plugins/claude-adv/scripts/claude-companion.mjs");
 const READY_SETUP = JSON.stringify({
   ready: true,
   readinessReason: null,
@@ -128,7 +129,7 @@ test("adapter setup and setup --json write plugin-installs registry", () => {
     const registry = readRegistry(codexHome);
     assert.deepEqual(
       registry.installs.map((entry) => entry.root),
-      [fs.realpathSync(ROOT)]
+      [fs.realpathSync(PLUGIN_ROOT)]
     );
     assert.match(registry.installs[0].lastSeenAt, /^\d{4}-\d{2}-\d{2}T/);
   }
@@ -146,7 +147,7 @@ test("adapter successful non-setup subcommand updates registry once", () => {
   assert.equal(readFileSync(counter, "utf8"), "1\n");
   assert.deepEqual(
     readRegistry(codexHome).installs.map((entry) => entry.root),
-    [fs.realpathSync(ROOT)]
+    [fs.realpathSync(PLUGIN_ROOT)]
   );
 });
 
@@ -387,7 +388,7 @@ test("delayed lock payload write does not let two writers both hold the lock", a
     `import fs from "node:fs";
 import os from "node:os";
 import { touchPluginInstallRegistry } from ${JSON.stringify(
-      pathToFileURL(path.join(ROOT, "codex/scripts/lib/codex-registry.mjs")).href
+      pathToFileURL(path.join(ROOT, "plugins/claude-adv/scripts/lib/codex-registry.mjs")).href
     )};
 const delayMs = Number(process.env.DELAY_LOCK_WRITE_MS || 0);
 let delayed = false;
@@ -455,7 +456,7 @@ test("CI review touches registry exactly once despite setup preflight", () => {
   assert.equal(readFileSync(counter, "utf8"), "1\n");
   assert.deepEqual(
     readRegistry(codexHome).installs.map((entry) => entry.root),
-    [fs.realpathSync(ROOT)]
+    [fs.realpathSync(PLUGIN_ROOT)]
   );
 });
 

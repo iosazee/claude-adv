@@ -4,9 +4,9 @@
 > Independent of the main thread, isolated from your project's settings and hooks,
 > built to break confidence in your work — not validate it.
 
-`claude-adv` runs an **adversarial reviewer** and a **write-capable rescue** out of your Claude Code session via slash commands. The reviewer is epistemically isolated from the implementing Claude: it spawns a fresh `claude` subprocess per review with locked argv invariants (`--tools ""`, `--no-session-persistence`, `--setting-sources ""`, plus `--bare` on API-key auth), so prompt injection in one turn cannot bias the next. The rescue path keeps the same isolation guarantees but grants edit permissions so a fresh Claude can do focused work on your behalf.
+`claude-adv` runs an **adversarial reviewer** and a **write-capable rescue** out of your Claude Code session via slash commands. The reviewer is epistemically isolated from the implementing Claude — fresh `claude` subprocess per review with locked argv invariants (`--tools ""`, `--no-session-persistence`, `--setting-sources ""`, plus `--bare` on API-key auth) — so prompt injection in one turn cannot bias the next. Rescue keeps the same isolation but grants edit permissions.
 
-It also includes a Codex plugin layer under `.codex-plugin/` and `codex/`: Codex skills call the same runtime through a small adapter that maps Codex environment into the existing Claude-oriented state and subprocess model.
+A self-contained Codex bundle (`plugins/claude-adv/`) exposes the same runtime to Codex sessions through a small adapter and native marketplace manifest.
 
 A Claude-flavored port of [OpenAI's `codex-plugin-cc`](https://github.com/openai/codex-plugin-cc).
 
@@ -30,28 +30,28 @@ The full flag reference for every command lives in [`docs/HOW-TO.md` §16](docs/
 
 ## Three ways to run it
 
-1. **Interactively in Claude Code** — the slash commands above. Review your working tree or a branch diff, or hand a stuck task to a write-capable rescue Claude. This is the primary surface.
-2. **Autonomously or from scripts** — enable the [Stop-time gate](docs/HOW-TO.md#6-use-the-stop-time-review-gate) to auto-review at every turn boundary, run [iterate-to-approve](docs/HOW-TO.md#12-iterate-a-review-to-approval) loops, or drive any command with `--json` for machine-readable verdicts (see [For agents and scripting](docs/HOW-TO.md#17-for-agents-and-scripting)). Other agents can invoke rescue as a subagent.
-3. **From Codex** — a [`.codex-plugin/`](#codex-install) layer exposes the same runtime to Codex (foreground-first) and to CI gates via API-key auth (see [`docs/HOW-TO.md` §11](docs/HOW-TO.md#11-switch-between-auth-modes)).
+- **Interactively in Claude Code** — the slash commands above. Primary surface.
+- **Autonomously or from scripts** — the [Stop-time gate](docs/HOW-TO.md#6-use-the-stop-time-review-gate) auto-reviews at every turn boundary; [iterate-to-approve](docs/HOW-TO.md#12-iterate-a-review-to-approval) loops; `--json` for machine-readable verdicts (see [For agents and scripting](docs/HOW-TO.md#17-for-agents-and-scripting)).
+- **From Codex** — the [Codex marketplace bundle](#codex-install) covers Codex sessions and CI gates ([§11](docs/HOW-TO.md#11-switch-between-auth-modes)).
 
-Auth (subscription / API key / Bedrock·Vertex·Foundry) is auto-detected on every run — see [auth modes and cost](docs/HOW-TO.md#11-switch-between-auth-modes).
+Auth (subscription / API key / Bedrock·Vertex·Foundry) is auto-detected per run — see [auth modes and cost](docs/HOW-TO.md#11-switch-between-auth-modes).
 
 ## Why it exists
 
-When Claude reviews Claude's own work in the same conversation, two failure modes show up:
+Claude reviewing Claude's own work in the same conversation has two failure modes:
 
-1. **Sycophancy by familiarity.** Same model, same context, same recent history → "looks good, here are minor suggestions."
-2. **Prompt-injection persistence.** Untrusted text in a diff can poison the conversation state and bias later reviews.
+1. **Sycophancy by familiarity.** Same model, same context, same recent history → "looks good, minor suggestions."
+2. **Prompt-injection persistence.** Untrusted text in a diff can poison conversation state and bias later reviews.
 
-`claude-adv` rules both out by structurally separating the reviewer from the implementer:
+`claude-adv` rules both out by structurally separating reviewer from implementer:
 
-- **Different process**, not a sub-call. The reviewer is a separate `claude` subprocess, so it shares no in-memory state with the parent.
-- **No history.** `--no-session-persistence` means the review session is never persisted; no resume, no carryover.
-- **No settings.** `--setting-sources ""` blocks project hooks and settings on every path. On API-key auth, `--bare` additionally strips plugin sync, CLAUDE.md auto-discovery, and credential-store reads; on subscription auth those are bounded instead by the locked tool-less prompt and a controlled temp working directory (see [auth modes](docs/HOW-TO.md#11-switch-between-auth-modes)).
-- **No tools.** `--tools ""` is a hard CLI-level gate. Even if the reviewer's prompt is jailbroken, it has no way to write files or run commands.
-- **Fresh subprocess per review.** A persistent Node supervisor pre-binds a Unix socket for low-latency hook firing, but it spawns a brand-new `claude` for every review request. Diff content in one review cannot influence the next.
+- **Different process**, not a sub-call — no shared in-memory state.
+- **No history** — `--no-session-persistence`; no resume, no carryover.
+- **No settings** — `--setting-sources ""` blocks project hooks/settings everywhere. On API-key auth, `--bare` additionally strips plugin sync, CLAUDE.md auto-discovery, and credential-store reads; on subscription auth those are bounded by the locked tool-less prompt and a controlled temp `cwd` ([auth modes](docs/HOW-TO.md#11-switch-between-auth-modes)).
+- **No tools** — `--tools ""` at the CLI level. Even a jailbroken prompt has no way to write files or run commands.
+- **Fresh subprocess per review** — a Node supervisor pre-binds a Unix socket for low-latency hook firing, but spawns brand-new `claude` per request.
 
-Each invariant is locked at the argv builder (`buildReviewerArgs`, `buildRescueArgs`) and asserted in golden-argv tests. Each is also verified end-to-end against real `claude`: prompt-injection persistence, `--tools ""` jailbreak resistance, and a malicious `.claude/settings.json` fixture all have adversarial integration tests.
+Each invariant is locked at the argv builders (`buildReviewerArgs`, `buildRescueArgs`), asserted in golden-argv tests, and verified end-to-end against real `claude` (prompt-injection persistence, `--tools ""` jailbreak resistance, malicious `.claude/settings.json` fixture).
 
 ## Quick start
 
@@ -78,13 +78,13 @@ That's the whole surface for everyday use. Everything below is orientation; the 
 
 ## Reference
 
-The everyday surface is above. The full reference lives in [`docs/HOW-TO.md`](docs/HOW-TO.md):
+Full reference in [`docs/HOW-TO.md`](docs/HOW-TO.md):
 
-- **[Command and flag reference](docs/HOW-TO.md#16-command-and-flag-reference)** — every flag for every command, plus scope / model / effort semantics and the inline-diff caps.
-- **[For agents and scripting](docs/HOW-TO.md#17-for-agents-and-scripting)** — `--json` output shapes, exit codes, and delegating rescue from another agent.
-- **[Iterate a review to approval](docs/HOW-TO.md#12-iterate-a-review-to-approval)** — the three-value verdict, `--continue`, and the automatic unbiased verification pass that makes `approve-with-notes` a real guarantee.
-- **[Auth modes and cost](docs/HOW-TO.md#11-switch-between-auth-modes)** — subscription / API key / Bedrock·Vertex·Foundry, what each costs, and how the reviewer's auth class is detected per run.
-- **[Develop on the plugin](docs/HOW-TO.md#15-develop-on-the-plugin-itself)** — running the test suite, the gated real-`claude` integration tests, and the invariant golden tests.
+- [Command and flag reference](docs/HOW-TO.md#16-command-and-flag-reference) — every flag, scope/model/effort semantics, inline-diff caps.
+- [For agents and scripting](docs/HOW-TO.md#17-for-agents-and-scripting) — `--json` shapes, exit codes, subagent routes.
+- [Iterate a review to approval](docs/HOW-TO.md#12-iterate-a-review-to-approval) — three-value verdict, `--continue`, automatic unbiased verification pass.
+- [Auth modes and cost](docs/HOW-TO.md#11-switch-between-auth-modes) — subscription / API key / Bedrock·Vertex·Foundry.
+- [Develop on the plugin](docs/HOW-TO.md#15-develop-on-the-plugin-itself) — test suite, gated real-`claude` integration tests, invariant golden tests.
 
 ## Install
 
@@ -121,15 +121,15 @@ You should see a JSON report with `ready: true`, your authenticated `claude` ver
 
 ### Codex install
 
-**When to use it:** you're working in an OpenAI Codex session and want a *Claude* second opinion — an adversarial review of your changes, or a write-capable rescue when Codex is stuck. It's the cross-vendor counterpart to running `claude-adv` inside Claude Code. If you're already in Claude Code, use the slash commands above instead; the Codex adapter is the Codex-side entry point only. Codex drives it through the skills in `codex/skills/`, which call the adapter at `codex/scripts/claude-adv-codex.mjs`.
+Use this when you're in an OpenAI Codex session and want a *Claude* second opinion — adversarial review of your changes, or write-capable rescue when Codex is stuck. The cross-vendor counterpart to running `claude-adv` inside Claude Code. (Already in Claude Code? Use the slash commands above; the Codex adapter is the Codex-side entry point only.) Codex drives the adapter at `scripts/claude-adv-codex.mjs` inside the installed `plugins/claude-adv/` bundle.
 
-Codex installs use `.codex-plugin/plugin.json`. Point Codex at the plugin root and run the first check:
+Recommended: in Codex Desktop, open Plugins → Add marketplace and paste `iosazee/claude-adv` (Git ref `main`). Optional sparse paths: `.agents/plugins` and `plugins/claude-adv`. For a cloned checkout, run:
 
 ```bash
-node "<plugin-root>/codex/scripts/claude-adv-codex.mjs" setup --json
+node "<checkout>/plugins/claude-adv/scripts/claude-adv-codex.mjs" setup --json
 ```
 
-Then use it foreground-only: `adversarial-review --wait`, `review --wait`, and `task <prompt>` for rescue. Background jobs are rejected and Stop-gate hooks aren't shipped on this path. The `claude` CLI must be installed and authenticated (or CI must provide an auth environment it accepts). If the Codex host doesn't expose the skill's absolute path, set `CLAUDE_PLUGIN_ROOT` explicitly. Full walkthrough in [`docs/HOW-TO.md` §1](docs/HOW-TO.md#1-install-and-verify).
+Foreground-only — `adversarial-review --wait`, `review --wait`, `task <prompt>` for rescue. Background jobs are rejected and Stop-gate hooks aren't shipped on this path. Requires authenticated `claude` CLI (or CI auth env). If the Codex host doesn't expose the skill's absolute path, set `CLAUDE_PLUGIN_ROOT` explicitly. Full walkthrough: [`docs/HOW-TO.md` §1](docs/HOW-TO.md#1-install-and-verify).
 
 ## Architecture in one paragraph
 
@@ -142,10 +142,11 @@ The rationale for each invariant — and the threat model behind the trust bound
 ```
 claude-adv/
 ├── .claude-plugin/plugin.json     Plugin manifest
-├── .codex-plugin/plugin.json      Codex plugin manifest
-├── codex/                          Codex adapter + skills
+├── .agents/plugins/marketplace.json  Codex marketplace manifest
+├── plugins/claude-adv/             Self-contained Codex bundle
+├── codex/                          One-release compatibility shim for the old adapter path
 ├── commands/                       7 slash commands
-├── agents/claude-rescue.md         Rescue subagent (delegates to /claude-adv:rescue)
+├── agents/                         claude-rescue.md, claude-reviewer.md (Agent-tool routes)
 ├── prompts/                        adversarial-review.md, review.md, rescue.md
 ├── schemas/review-output.schema.json   Strict schema for review verdict + findings
 ├── hooks/hooks.json                SessionStart / SessionEnd / Stop hook declarations
