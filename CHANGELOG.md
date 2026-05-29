@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.2.0] — 2026-05-29
+
 ### Added
 - Native Codex marketplace install via `.agents/plugins/marketplace.json` so `iosazee/claude-adv` works in Codex Desktop's Add marketplace dialog.
 - `scripts/release/sync-codex-bundle.mjs` keeps the Codex bundle (`plugins/claude-adv/`) in lockstep with root sources; CI checks for bundle drift.

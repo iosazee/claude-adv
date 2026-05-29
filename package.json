@@ -1,6 +1,6 @@
 {
   "name": "claude-adv",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Adversarial code review and write-capable rescue, powered by Claude. Port of OpenAI's codex-plugin-cc.",
