@@ -1,6 +1,6 @@
 {
   "name": "claude-adv",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Adversarial code review and write-capable rescue, powered by Claude. Port of codex-plugin-cc.",
   "displayName": "Claude Adv",
   "author": {
