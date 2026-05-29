@@ -28,11 +28,13 @@ const ALLOWED_BY_PATTERN = [
       "plugins/claude-adv/skills/claude-adv-rescue/SKILL.md",
       "plugins/claude-adv/skills/claude-adv-review/SKILL.md",
       "plugins/claude-adv/skills/claude-adv-runtime/SKILL.md",
+      "scripts/release/sync-codex-bundle.mjs",
       "tests/integration/codex-plugin-installed-smoke.test.mjs",
       "tests/unit/codex-manifest.test.mjs",
       "tests/unit/codex-marketplace-manifest.test.mjs",
       "tests/unit/codex-no-stray-codex-paths.test.mjs",
       "tests/unit/codex-registry.test.mjs",
+      "tests/unit/plugin-manifest-versions.test.mjs",
     ]),
   },
 ];

@@ -23,6 +23,16 @@ const BUNDLE = path.join(ROOT, "plugins/claude-adv");
 const BUNDLE_SCRIPTS = path.join(BUNDLE, "scripts");
 const CHECK_MODE = process.argv.includes("--check");
 
+// package.json is the single source of truth for the release version. These
+// plugin manifests must mirror it; codex-manifest.test.mjs asserts the Codex
+// manifest matches, and the Claude marketplace surfaces the Claude manifest
+// version. Keeping them in lockstep here means a `npm version`-style bump can
+// never silently drift the bundle out of sync again.
+const VERSION_MANIFESTS = [
+  ".claude-plugin/plugin.json",
+  "plugins/claude-adv/.codex-plugin/plugin.json",
+];
+
 const ASSETS = [
   "prompts/adversarial-review.md",
   "prompts/review.md",
@@ -128,6 +138,23 @@ function planCopy(srcAbs, dstAbs) {
   plannedWrites.set(dstAbs, { rel, body: expectedBody(srcAbs) });
 }
 
+// Rewrite only the top-level "version" string, preserving the manifest's
+// hand-authored formatting (inline arrays, key order). A full JSON re-serialize
+// would expand inline arrays and churn the diff, so we target the field itself.
+function planManifestVersion(manifestRel, version) {
+  const manifestAbs = path.join(ROOT, manifestRel);
+  if (!existsSync(manifestAbs)) {
+    throw new Error(`Missing version manifest: ${manifestRel}`);
+  }
+  const body = readFileSync(manifestAbs, "utf8");
+  const versionRe = /("version"\s*:\s*")([^"]*)(")/;
+  if (!versionRe.test(body)) {
+    throw new Error(`Could not locate a "version" field in ${manifestRel}`);
+  }
+  const expected = body.replace(versionRe, `$1${version}$3`);
+  plannedWrites.set(manifestAbs, { rel: manifestRel, body: expected });
+}
+
 function* walkFiles(dir) {
   if (!existsSync(dir)) return;
   for (const name of readdirSync(dir)) {
@@ -193,6 +220,14 @@ for (const asset of ASSETS) {
   planCopy(path.join(ROOT, asset), path.join(BUNDLE, asset));
 }
 
+const packageVersion = JSON.parse(readFileSync(path.join(ROOT, "package.json"), "utf8")).version;
+if (typeof packageVersion !== "string" || packageVersion.length === 0) {
+  throw new Error("package.json is missing a usable version string");
+}
+for (const manifestRel of VERSION_MANIFESTS) {
+  planManifestVersion(manifestRel, packageVersion);
+}
+
 applyPlan();
 
 for (const subcommand of subcommands) {
@@ -205,6 +240,7 @@ for (const subcommand of subcommands) {
 
 if (!CHECK_MODE) {
   process.stdout.write(
-    `Synced ${jsFiles.length} JS files + ${ASSETS.length} assets to plugins/claude-adv/\n`
+    `Synced ${jsFiles.length} JS files + ${ASSETS.length} assets to plugins/claude-adv/, ` +
+      `${VERSION_MANIFESTS.length} manifests pinned to ${packageVersion}\n`
   );
 }
