@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.2.1] — 2026-05-29
+
 ### Changed
 - `sync-codex-bundle.mjs` now pins the Claude and Codex plugin manifest versions to `package.json`, so `npm run check:codex-bundle` fails on version drift instead of letting a half-bumped release reach CI. Added an always-on unit test asserting both manifests mirror `package.json`.
 
