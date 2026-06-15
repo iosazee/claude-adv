@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- `claude-reviewer` agent and `/claude-adv:adversarial-review` now surface and forward the existing `--continue <prior.json>` / `--json` flags, documenting iterative (round-N) re-review and the automatic unbiased verification pass. The runtime already supported this; the agent and command contracts did not expose it, so round-2+ re-reviews had to be hand-rolled.
+- Machine-readable continuation signal in the review `--json` payload: `continueRequested`, `continueDegraded`, and `continueDegradeReason` (`unreadable` | `invalid-json` | `not-a-review`). Automated iterate-to-approve loops can now detect when a `--continue` file was missing, unparseable, or valid JSON that is not a review payload — cases where the run silently falls back to a first-pass review instead of a verified re-review.
+
 ## [0.2.1] — 2026-05-29
 
 ### Changed
