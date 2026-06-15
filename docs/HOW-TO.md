@@ -748,12 +748,17 @@ All commands emit machine-readable output with `--json`.
     ],
     "next_steps": ["..."]
   },
+  "continueRequested": false,  // whether --continue was passed
+  "continueDegraded":  false,  // true if --continue was passed but unusable (file missing / not JSON)
+  "continueDegradeReason": null, // "unreadable" | "invalid-json" | "not-a-review" when degraded, else null
   "continueAttempt":   null,   // populated only on --continue runs (the biased pass)
   "finalVerification": { "triggered": false }   // the unbiased pass; see §12
 }
 ```
 
 `fingerprint` is `sha1(file:line_start:title)[:16]`, so an agent can diff finding sets across `--continue` passes to see what was resolved.
+
+When `--continue` is passed but the prior-report file is missing or not JSON, the runtime does not abort — it falls back to a first-pass review and sets `continueDegraded: true` (with `continueDegradeReason`). An automated iterate-to-approve loop should treat a degraded run as **not** a verified re-review: fix the path and re-run rather than trusting the verdict. A continuation whose prior iteration legitimately produced no findings is a clean continuation, not a degraded one. These three fields live at the top level of the payload only — they are not mirrored into the nested `continueAttempt` / `finalVerification` sub-objects.
 
 **Rescue (`--json`)** writes `{ sessionId, ok, exitCode, costUsd, rawOutput, error, stderr }` — `rawOutput` is the rescue Claude's verbatim report.
 
