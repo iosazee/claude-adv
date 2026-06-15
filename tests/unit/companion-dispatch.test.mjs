@@ -560,6 +560,204 @@ test("companion: --continue + approve triggers fresh verification (and the verif
   assert.equal(parsed.continueAttempt.n_findings, 1);
 });
 
+test("companion: --continue with a missing file sets continueDegraded (silent first-pass fallback)", () => {
+  // A wrong/stale path must not abort the review, but the run silently becomes
+  // a first-pass review rather than a verified re-review. The payload exposes
+  // that so an automated iterate-to-approve loop can branch on it.
+  const repo = makeRepoWithDirty();
+  const mockDir = mockBinDir();
+  const counterFile = path.join(mockDir, "counter");
+  const env = {
+    ...process.env,
+    PATH: `${mockDir}:${process.env.PATH}`,
+    MOCK_CLAUDE_COUNTER_FILE: counterFile,
+    // needs-attention → no verification pass, single model call.
+    MOCK_CLAUDE_SCRIPTS: JSON.stringify([
+      reviewScript({
+        verdict: "needs-attention",
+        summary: "first-pass review (continuation file was unusable)",
+        findings: [
+          {
+            severity: "high",
+            title: "real issue",
+            body: "something concrete",
+            file: "f.txt",
+            line_start: 1,
+            line_end: 1,
+            confidence: 0.9,
+            recommendation: "fix it",
+          },
+        ],
+        next_steps: [],
+      }),
+    ]),
+  };
+  const missing = path.join(mockDir, "does-not-exist.json");
+  const r = spawnSync(
+    process.execPath,
+    [COMPANION, "adversarial-review", "--wait", "--json", "--cwd", repo, "--continue", missing],
+    { encoding: "utf8", env }
+  );
+  assert.equal(r.status, 0, `stderr: ${r.stderr}`);
+  const parsed = JSON.parse(r.stdout);
+  assert.equal(parsed.continueRequested, true);
+  assert.equal(parsed.continueDegraded, true);
+  assert.equal(parsed.continueDegradeReason, "unreadable");
+  // Still produced a (first-pass) review rather than erroring.
+  assert.equal(parsed.review_output.verdict, "needs-attention");
+});
+
+test("companion: --continue with a non-JSON file sets continueDegraded=invalid-json", () => {
+  const repo = makeRepoWithDirty();
+  const mockDir = mockBinDir();
+  const counterFile = path.join(mockDir, "counter");
+  const badFile = path.join(mockDir, "not-json.json");
+  writeFileSync(badFile, "this is not json {{{\n");
+  const env = {
+    ...process.env,
+    PATH: `${mockDir}:${process.env.PATH}`,
+    MOCK_CLAUDE_COUNTER_FILE: counterFile,
+    MOCK_CLAUDE_SCRIPTS: JSON.stringify([
+      reviewScript({
+        verdict: "needs-attention",
+        summary: "first-pass review (continuation file was not JSON)",
+        findings: [
+          {
+            severity: "high",
+            title: "real issue",
+            body: "something concrete",
+            file: "f.txt",
+            line_start: 1,
+            line_end: 1,
+            confidence: 0.9,
+            recommendation: "fix it",
+          },
+        ],
+        next_steps: [],
+      }),
+    ]),
+  };
+  const r = spawnSync(
+    process.execPath,
+    [COMPANION, "adversarial-review", "--wait", "--json", "--cwd", repo, "--continue", badFile],
+    { encoding: "utf8", env }
+  );
+  assert.equal(r.status, 0, `stderr: ${r.stderr}`);
+  const parsed = JSON.parse(r.stdout);
+  assert.equal(parsed.continueRequested, true);
+  assert.equal(parsed.continueDegraded, true);
+  assert.equal(parsed.continueDegradeReason, "invalid-json");
+});
+
+test("companion: --continue with valid JSON that is not a review payload sets continueDegraded=not-a-review", () => {
+  // A stale but structurally-valid JSON file (e.g. a package.json) must not
+  // masquerade as a clean "no findings" continuation.
+  const repo = makeRepoWithDirty();
+  const mockDir = mockBinDir();
+  const counterFile = path.join(mockDir, "counter");
+  const notAReview = path.join(mockDir, "package.json");
+  writeFileSync(notAReview, JSON.stringify({ name: "x", version: "1.0.0", scripts: {} }));
+  const env = {
+    ...process.env,
+    PATH: `${mockDir}:${process.env.PATH}`,
+    MOCK_CLAUDE_COUNTER_FILE: counterFile,
+    MOCK_CLAUDE_SCRIPTS: JSON.stringify([
+      reviewScript({
+        verdict: "needs-attention",
+        summary: "first-pass review (continuation file was not a review payload)",
+        findings: [
+          {
+            severity: "high",
+            title: "real issue",
+            body: "something concrete",
+            file: "f.txt",
+            line_start: 1,
+            line_end: 1,
+            confidence: 0.9,
+            recommendation: "fix it",
+          },
+        ],
+        next_steps: [],
+      }),
+    ]),
+  };
+  const r = spawnSync(
+    process.execPath,
+    [COMPANION, "adversarial-review", "--wait", "--json", "--cwd", repo, "--continue", notAReview],
+    { encoding: "utf8", env }
+  );
+  assert.equal(r.status, 0, `stderr: ${r.stderr}`);
+  const parsed = JSON.parse(r.stdout);
+  assert.equal(parsed.continueRequested, true);
+  assert.equal(parsed.continueDegraded, true);
+  assert.equal(parsed.continueDegradeReason, "not-a-review");
+});
+
+test("companion: a clean --continue is not degraded", () => {
+  // A readable JSON payload (even one whose prior iteration had findings) is a
+  // genuine continuation, not a degraded fallback.
+  const repo = makeRepoWithDirty();
+  const mockDir = mockBinDir();
+  const counterFile = path.join(mockDir, "counter");
+  const priorReport = path.join(mockDir, "prior.json");
+  writeFileSync(
+    priorReport,
+    JSON.stringify({
+      review_output: {
+        verdict: "needs-attention",
+        findings: [
+          {
+            severity: "high",
+            title: "prior issue",
+            body: "x",
+            file: "f.txt",
+            line_start: 1,
+            line_end: 1,
+            confidence: 0.8,
+            recommendation: "y",
+            fingerprint: "bbbbbbbbbbbbbbbb",
+          },
+        ],
+      },
+    })
+  );
+  const env = {
+    ...process.env,
+    PATH: `${mockDir}:${process.env.PATH}`,
+    MOCK_CLAUDE_COUNTER_FILE: counterFile,
+    // needs-attention → no verification pass; we only assert the degrade flags.
+    MOCK_CLAUDE_SCRIPTS: JSON.stringify([
+      reviewScript({
+        verdict: "needs-attention",
+        summary: "still blocking",
+        findings: [
+          {
+            severity: "high",
+            title: "still here",
+            body: "x",
+            file: "f.txt",
+            line_start: 1,
+            line_end: 1,
+            confidence: 0.85,
+            recommendation: "y",
+          },
+        ],
+        next_steps: [],
+      }),
+    ]),
+  };
+  const r = spawnSync(
+    process.execPath,
+    [COMPANION, "adversarial-review", "--wait", "--json", "--cwd", repo, "--continue", priorReport],
+    { encoding: "utf8", env }
+  );
+  assert.equal(r.status, 0, `stderr: ${r.stderr}`);
+  const parsed = JSON.parse(r.stdout);
+  assert.equal(parsed.continueRequested, true);
+  assert.equal(parsed.continueDegraded, false);
+  assert.equal(parsed.continueDegradeReason, null);
+});
+
 test("companion: --continue + needs-attention does NOT trigger verification (already blocking)", () => {
   // No point spending a second model call when the primary already blocks.
   const repo = makeRepoWithDirty();
@@ -702,6 +900,10 @@ test("companion: without --continue, no verification runs even for approve verdi
   const parsed = JSON.parse(r.stdout);
   assert.equal(parsed.review_output.verdict, "approve");
   assert.equal(parsed.finalVerification.triggered, false);
+  // No --continue → the continuation signal is inert.
+  assert.equal(parsed.continueRequested, false);
+  assert.equal(parsed.continueDegraded, false);
+  assert.equal(parsed.continueDegradeReason, null);
   const counter = parseInt(readFileSync(counterFile, "utf8"), 10);
   assert.equal(counter, 1, "single-shot must consume exactly one script");
 });
