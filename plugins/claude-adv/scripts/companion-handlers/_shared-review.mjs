@@ -95,9 +95,20 @@ export async function runReview(argv, { promptFile, reviewName }) {
   // (b) suppress re-litigation when the issue is fixed, and (c) focus on
   // new issues. Without this, every iteration is a fresh adversarial pass
   // with no convergence force — see HOW-TO §"Iterating a review to approval".
-  const previouslyAddressed = options.continue
-    ? buildPreviouslyAddressedBlock(options.continue, cwd)
-    : "(no prior iteration; this is a first-pass review)";
+  // `continueDegraded` is the machine-readable signal that a `--continue` was
+  // requested but could not actually be applied (file missing or not JSON), so
+  // the run silently fell back to a first-pass review. Automated
+  // iterate-to-approve loops branch on this to avoid mistaking a fresh review
+  // for a verified re-review. Absent `--continue`, both flags are false.
+  let previouslyAddressed = "(no prior iteration; this is a first-pass review)";
+  let continueDegraded = false;
+  let continueDegradeReason = null;
+  if (options.continue) {
+    const continuation = buildPreviouslyAddressedBlock(options.continue, cwd);
+    previouslyAddressed = continuation.block;
+    continueDegraded = continuation.degraded;
+    continueDegradeReason = continuation.reason;
+  }
 
   const promptTemplate = loadPromptTemplate(ROOT, path.basename(promptFile, ".md"));
   const renderedPrompt = interpolateTemplate(promptTemplate, {
@@ -233,6 +244,15 @@ export async function runReview(argv, { promptFile, reviewName }) {
       rawOutput: finalRawOutput,
     },
     review_output: result.review,
+    // Continuation signal for automated iterate-to-approve loops:
+    // `continueRequested` echoes whether --continue was passed; `continueDegraded`
+    // is true when it was passed but could not be applied (file missing or not
+    // JSON) and the run silently fell back to a first-pass review, with
+    // `continueDegradeReason` naming the case. A clean continuation — including
+    // one whose prior iteration legitimately had no findings — is not degraded.
+    continueRequested: Boolean(options.continue),
+    continueDegraded,
+    continueDegradeReason,
     // Verification trace: when --continue triggered a fresh verification
     // pass, both attempts are surfaced so the user can see what the biased
     // and unbiased reviewers found.
@@ -581,24 +601,61 @@ export function buildRepairPrompt(originalPrompt, rawOutput, errorMessage) {
 // by fingerprint so the model has a stable identity to reference, and tells
 // the model the iteration discipline: verify resolution against current
 // content, suppress when fixed, re-raise (with an explanation) when not.
+// Returns { block, degraded, reason }. `block` is the prompt text interpolated
+// as PREVIOUSLY_ADDRESSED. `degraded` is true only when `--continue` could not
+// be applied at all (file missing or not JSON) and the run silently fell back
+// to a first-pass review; `reason` names which case ("unreadable" |
+// "invalid-json") or is null when the continuation applied cleanly. A prior
+// iteration that legitimately produced no findings is NOT degraded.
 function buildPreviouslyAddressedBlock(continueFilePath, cwd) {
   const resolvedPath = path.resolve(cwd, continueFilePath);
   let raw;
   try {
     raw = readFileSync(resolvedPath, "utf8");
   } catch (err) {
-    return `(--continue ${continueFilePath} could not be read: ${err.message}; treat this as a first-pass review)`;
+    return {
+      block: `(--continue ${continueFilePath} could not be read: ${err.message}; treat this as a first-pass review)`,
+      degraded: true,
+      reason: "unreadable",
+    };
   }
   let parsed;
   try {
     parsed = JSON.parse(raw);
   } catch (err) {
-    return `(--continue ${continueFilePath} did not parse as JSON: ${err.message}; treat this as a first-pass review)`;
+    return {
+      block: `(--continue ${continueFilePath} did not parse as JSON: ${err.message}; treat this as a first-pass review)`,
+      degraded: true,
+      reason: "invalid-json",
+    };
+  }
+  // Structurally-valid JSON that is not a review payload (e.g. a stale
+  // package.json, `null`, a bare array) must NOT masquerade as a clean
+  // "no findings" continuation — that is the same silent-degrade footgun the
+  // degrade signal exists to close. Require a recognizable review shape; if it
+  // is absent, this is a degraded first-pass review, not a real continuation.
+  const isObject = parsed !== null && typeof parsed === "object" && !Array.isArray(parsed);
+  const looksLikeReview =
+    isObject &&
+    ((parsed.review_output && typeof parsed.review_output === "object") ||
+      (parsed.review && typeof parsed.review === "object") ||
+      Array.isArray(parsed.findings) ||
+      typeof parsed.verdict === "string");
+  if (!looksLikeReview) {
+    return {
+      block: `(--continue ${continueFilePath} is valid JSON but not a review payload; treat this as a first-pass review)`,
+      degraded: true,
+      reason: "not-a-review",
+    };
   }
   const findings =
     parsed.review_output?.findings ?? parsed.review?.findings ?? parsed.findings ?? [];
   if (!Array.isArray(findings) || findings.length === 0) {
-    return "(prior iteration produced no findings; this iteration is fresh)";
+    return {
+      block: "(prior iteration produced no findings; this iteration is fresh)",
+      degraded: false,
+      reason: null,
+    };
   }
   const lines = [
     `<previously_addressed_protocol>`,
@@ -652,5 +709,5 @@ function buildPreviouslyAddressedBlock(continueFilePath, cwd) {
       lines.push(`  recommendation: ${String(f.recommendation).slice(0, 300)}`);
     }
   }
-  return lines.join("\n");
+  return { block: lines.join("\n"), degraded: false, reason: null };
 }
